@@ -1,0 +1,10 @@
+export enum CostCategory {
+  HOTEL = 'HOTEL',
+  TRANSPORT = 'TRANSPORT',
+  ACTIVITY = 'ACTIVITY',
+  GUIDE = 'GUIDE',
+  MEAL = 'MEAL',
+  FLIGHT = 'FLIGHT',
+  INSURANCE = 'INSURANCE',
+  OTHER = 'OTHER',
+}

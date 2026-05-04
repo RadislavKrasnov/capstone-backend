@@ -1,0 +1,6 @@
+export enum RecommendationCategory {
+  FINANCIAL = 'FINANCIAL',
+  ITINERARY = 'ITINERARY',
+  OPERATIONAL = 'OPERATIONAL',
+  COST_STRUCTURE = 'COST_STRUCTURE',
+}
