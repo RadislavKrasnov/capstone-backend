@@ -7,20 +7,14 @@ import { RecommendationDraft } from '../../types/recommendation-draft.type';
 import { RecommendationRule } from '../recommendation-rule.interface';
 
 @Injectable()
-export class WeakSafetyBufferRule implements RecommendationRule {
-  readonly code = 'WEAK_BREAK_EVEN_SAFETY';
+export class VeryLowMarginRule implements RecommendationRule {
+  readonly code = 'VERY_LOW_MARGIN';
   readonly category = RecommendationCategory.FINANCIAL;
 
   evaluate(context: AnalysisContext): RecommendationDraft[] {
     const financial = context.financialMetrics;
-    const expectedGroupSize = context.package.expectedGroupSize;
 
-    if (
-      !financial ||
-      financial.contributionPerPerson <= 0 ||
-      expectedGroupSize < financial.breakEvenGroupSizeRounded ||
-      financial.breakEvenSafetyTravelers > 2
-    ) {
+    if (!financial || financial.grossProfit < 0 || financial.grossMarginPercent >= 10) {
       return [];
     }
 
@@ -29,11 +23,10 @@ export class WeakSafetyBufferRule implements RecommendationRule {
         ruleCode: this.code,
         category: this.category,
         severity: RecommendationSeverity.HIGH,
-        title: 'Break-even safety buffer is weak',
-        explanation: `The package has only ${financial.breakEvenSafetyTravelers.toFixed(2)} traveler(s) above break-even at the expected group size.`,
-        suggestedAction:
-          'Increase margin or reduce fixed costs to protect the package against cancellations.',
-        affectedMetric: 'breakEvenSafetyTravelers',
+        title: 'Package has very low profitability',
+        explanation: `Gross margin is only ${financial.grossMarginPercent.toFixed(2)}%, leaving very little protection against supplier price changes, discounts, refunds, or operational mistakes.`,
+        suggestedAction: 'Review pricing and supplier costs before publishing this package.',
+        affectedMetric: 'grossMarginPercent',
       },
     ];
   }

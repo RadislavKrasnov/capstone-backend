@@ -15,14 +15,23 @@ export class UnderfilledDayRule implements RecommendationRule {
     const itineraryMetrics = context.itineraryMetrics ?? [];
 
     return itineraryMetrics
-      .filter((metric) => metric.activityCount === 0 && metric.transferMinutes + metric.flightMinutes < 60 && metric.dayDurationMinutes < 3 * 60)
+      .filter(
+        (metric) =>
+          (metric.activityCount === 0 && metric.freeTimeMinutes < 240) ||
+          (metric.activityCount === 1 && metric.dayDurationMinutes < 240),
+      )
       .map((metric) => ({
         ruleCode: this.code,
         category: this.category,
-        severity: RecommendationSeverity.LOW,
+        severity:
+          metric.activityCount === 0 ? RecommendationSeverity.MEDIUM : RecommendationSeverity.LOW,
         title: `Day ${metric.dayNumber} may be underfilled`,
-        explanation: 'The day has very limited planned activity and does not appear to be a clearly marked transfer or rest day.',
-        suggestedAction: 'Add a light optional activity, cultural stop, or explicitly position this day as a rest day in the itinerary description.',
+        explanation:
+          metric.activityCount === 0
+            ? 'The day has no planned activity and does not appear to contain enough free time to be clearly positioned as a rest day.'
+            : 'The day has only one short planned activity, which may reduce perceived package value.',
+        suggestedAction:
+          'Add a meaningful activity, mark the day as a rest day, or improve the public day description.',
         affectedMetric: 'activityCount',
         affectedDayId: metric.dayId,
       }));

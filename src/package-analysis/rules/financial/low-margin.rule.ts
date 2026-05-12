@@ -20,21 +20,24 @@ export class LowMarginRule implements RecommendationRule {
 
     const minTargetMarginPercent = Number(context.configuration.minTargetMarginPercent);
 
-    if (financial.grossProfit < 0 || financial.grossMarginPercent >= minTargetMarginPercent) {
+    if (
+      financial.grossProfit < 0 ||
+      financial.grossMarginPercent < 10 ||
+      financial.grossMarginPercent >= minTargetMarginPercent
+    ) {
       return [];
     }
+
+    const priceGap = Math.max(0, financial.priceGapPerPerson);
 
     return [
       {
         ruleCode: this.code,
         category: this.category,
-        severity:
-          financial.grossMarginPercent < minTargetMarginPercent / 2
-            ? RecommendationSeverity.HIGH
-            : RecommendationSeverity.MEDIUM,
+        severity: RecommendationSeverity.MEDIUM,
         title: 'Gross margin is below the target threshold',
         explanation: `Gross margin is ${financial.grossMarginPercent.toFixed(2)}%, below the configured target of ${minTargetMarginPercent.toFixed(2)}%.`,
-        suggestedAction: `Consider a price of at least ${financial.requiredPriceForTargetMargin.toFixed(2)} per person or reduce costs by ${financial.requiredCostReductionForTargetMargin.toFixed(2)}.`,
+        suggestedAction: `Increase price by approximately ${priceGap.toFixed(2)} per person or reduce costs by ${financial.requiredCostReductionForTargetMargin.toFixed(2)}.`,
         affectedMetric: 'grossMarginPercent',
       },
     ];

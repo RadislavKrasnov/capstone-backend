@@ -25,6 +25,9 @@ import { WeakSubScoreRule } from '../rules/quality/weak-sub-score.rule';
 import { RecommendationRule } from '../rules/recommendation-rule.interface';
 import { AnalysisContext } from '../types/analysis-context.type';
 import { RecommendationDraft } from '../types/recommendation-draft.type';
+import { HighFixedCostExposureRule } from '../rules/financial/high-fixed-cost-exposure.rule';
+import { VeryLowMarginRule } from '../rules/financial/very-low-margin.rule';
+import { HighActivityDensityRule } from '../rules/operational/high-activity-density.rule';
 
 @Injectable()
 export class RecommendationEngineService {
@@ -52,27 +55,37 @@ export class RecommendationEngineService {
     highOtherCostShareRule: HighOtherCostShareRule,
     lowQualityScoreRule: LowQualityScoreRule,
     weakSubScoreRule: WeakSubScoreRule,
+    veryLowMarginRule: VeryLowMarginRule,
+    highFixedCostExposureRule: HighFixedCostExposureRule,
+    highActivityDensityRule: HighActivityDensityRule,
   ) {
     this.rules = [
       negativeProfitRule,
       lowMarginRule,
+      veryLowMarginRule,
       breakEvenRiskRule,
       nonPositiveContributionRule,
       weakSafetyBufferRule,
+      highFixedCostExposureRule,
+
       overloadedDayRule,
       criticalFatigueDayRule,
       insufficientRestTimeRule,
       underfilledDayRule,
       consecutiveHighFatigueDaysRule,
+
       excessiveTransferTimeRule,
       shortBuffersRule,
       longDayDurationRule,
       noMealBreakRule,
       lateFinishEarlyStartRule,
+      highActivityDensityRule,
+
       supplierDependencyRiskRule,
       hotelCostDominanceRule,
       transportCostDominanceRule,
       highOtherCostShareRule,
+
       lowQualityScoreRule,
       weakSubScoreRule,
     ];

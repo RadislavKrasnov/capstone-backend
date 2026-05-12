@@ -13,8 +13,13 @@ export class BreakEvenRiskRule implements RecommendationRule {
 
   evaluate(context: AnalysisContext): RecommendationDraft[] {
     const financial = context.financialMetrics;
+    const expectedGroupSize = context.package.expectedGroupSize;
 
-    if (!financial || financial.contributionPerPerson <= 0 || financial.breakEvenUtilizationPercent <= 80) {
+    if (
+      !financial ||
+      financial.contributionPerPerson <= 0 ||
+      expectedGroupSize >= financial.breakEvenGroupSizeRounded
+    ) {
       return [];
     }
 
@@ -22,13 +27,11 @@ export class BreakEvenRiskRule implements RecommendationRule {
       {
         ruleCode: this.code,
         category: this.category,
-        severity:
-          financial.breakEvenUtilizationPercent > 100
-            ? RecommendationSeverity.HIGH
-            : RecommendationSeverity.MEDIUM,
-        title: 'Break-even point is too close to expected group size',
-        explanation: `Break-even requires ${financial.breakEvenGroupSize.toFixed(2)} travelers, equal to ${financial.breakEvenUtilizationPercent.toFixed(2)}% of the expected group size.`,
-        suggestedAction: 'Lower fixed costs or increase price to create a safer profitability buffer.',
+        severity: RecommendationSeverity.CRITICAL,
+        title: 'Expected group size is below break-even',
+        explanation: `The package needs at least ${financial.breakEvenGroupSizeRounded} travelers to break even, but the expected group size is ${expectedGroupSize}.`,
+        suggestedAction:
+          'Set a higher minimum group size, increase price, or reduce fixed costs before publishing.',
         affectedMetric: 'breakEvenGroupSize',
       },
     ];

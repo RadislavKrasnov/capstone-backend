@@ -7,23 +7,24 @@ import { RecommendationDraft } from '../../types/recommendation-draft.type';
 import { RecommendationRule } from '../recommendation-rule.interface';
 
 @Injectable()
-export class NoMealBreakRule implements RecommendationRule {
-  readonly code = 'NO_MEAL_BREAK';
+export class HighActivityDensityRule implements RecommendationRule {
+  readonly code = 'HIGH_ACTIVITY_DENSITY';
   readonly category = RecommendationCategory.OPERATIONAL;
 
   evaluate(context: AnalysisContext): RecommendationDraft[] {
     const itineraryMetrics = context.itineraryMetrics ?? [];
 
     return itineraryMetrics
-      .filter((metric) => metric.dayDurationMinutes > 360 && !metric.hasMealBreak)
+      .filter((metric) => metric.activityDensity > 0.65)
       .map((metric) => ({
         ruleCode: this.code,
         category: this.category,
         severity: RecommendationSeverity.MEDIUM,
-        title: `Day ${metric.dayNumber} has no clear meal break`,
-        explanation: `The itinerary day lasts ${Math.round(metric.dayDurationMinutes / 60)} hours but has no planned meal block.`,
-        suggestedAction: 'Add a meal break to improve comfort and schedule realism.',
-        affectedMetric: 'mealMinutes',
+        title: `Day ${metric.dayNumber} has high activity density`,
+        explanation: `Activity density is ${metric.activityDensity.toFixed(2)} activities per active hour, which may make the day feel rushed.`,
+        suggestedAction:
+          'Increase time gaps, reduce activity count, or spread activities across the day.',
+        affectedMetric: 'activityDensity',
         affectedDayId: metric.dayId,
       }));
   }

@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
 
-import { FatigueLevel } from '../../../common/enums/fatigue-level.enum';
 import { RecommendationCategory } from '../../../common/enums/recommendation-category.enum';
 import { RecommendationSeverity } from '../../../common/enums/recommendation-severity.enum';
 import { AnalysisContext } from '../../types/analysis-context.type';
@@ -16,14 +15,15 @@ export class OverloadedDayRule implements RecommendationRule {
     const dailyResults = context.dailyFatigueResults ?? [];
 
     return dailyResults
-      .filter((result) => result.fatigueLevel === FatigueLevel.HIGH)
+      .filter((result) => result.fatigueScore > context.configuration.maxDailyFatigueScore)
       .map((result) => ({
         ruleCode: this.code,
         category: this.category,
         severity: RecommendationSeverity.HIGH,
         title: `Day ${result.dayNumber} is overloaded`,
-        explanation: `Fatigue score is ${result.fatigueScore}/100, which may reduce customer satisfaction.`,
-        suggestedAction: 'Reduce the number of activities, add free time, or shorten transfers.',
+        explanation: `Fatigue score is ${result.fatigueScore}/100, above the configured limit of ${context.configuration.maxDailyFatigueScore}.`,
+        suggestedAction:
+          'Move one activity to another day, reduce transfer time, or add more free time.',
         affectedMetric: 'fatigueScore',
         affectedDayId: result.dayId,
       }));

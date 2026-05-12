@@ -32,33 +32,77 @@ export type AnalysisDashboardResponse = {
     totalCost: number;
     grossProfit: number;
     grossMarginPercent: number;
+
     fixedCostTotal: number;
     variableCostTotal: number;
     variableCostPerPerson: number;
+
+    costPerPerson: number;
+    profitPerPerson: number;
     contributionPerPerson: number;
+
     breakEvenGroupSize: number;
+    breakEvenGroupSizeRounded: number;
     breakEvenSafetyTravelers: number;
     breakEvenUtilizationPercent: number;
+
     requiredPriceForTargetMargin: number;
+    priceGapPerPerson: number;
     requiredCostReductionForTargetMargin: number;
+
+    markupPercent: number;
     financialRiskLevel: FinancialRiskLevel;
+
+    categoryCostBreakdown: Array<{
+      category: string;
+      totalCost: number;
+      sharePercent: number;
+    }>;
+
+    supplierCostBreakdown: Array<{
+      supplierId: number | null;
+      supplierName: string;
+      totalCost: number;
+      sharePercent: number;
+    }>;
   };
   itinerary: {
     itineraryBalanceScore: number;
     averageFatigueScore: number;
+    averageBalanceScore: number;
+
     overloadedDaysCount: number;
     criticalDaysCount: number;
+    consecutiveHighFatigueSequences: number;
+
+    validationWarnings: string[];
+
     dailyResults: Array<{
       dayId: number;
       dayNumber: number;
+      title?: string;
+
+      activityCount: number;
+      transferMinutes: number;
+      flightMinutes: number;
+      freeTimeMinutes: number;
+      mealMinutes: number;
+      dayDurationMinutes: number;
+
       activityLoad: number;
       transferLoad: number;
       intensityLoad: number;
       compressionPenalty: number;
       restCredit: number;
+
       fatigueScore: number;
       balanceScore: number;
       fatigueLevel: FatigueLevel;
+
+      transferSharePercent: number;
+      activityDensity: number;
+      restRatioPercent: number;
+
       reasons: string[];
     }>;
   };

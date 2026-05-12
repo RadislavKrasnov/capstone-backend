@@ -45,7 +45,10 @@ export class PackageAnalysisService {
     private readonly analysisResultPersister: AnalysisResultPersisterService,
   ) {}
 
-  async analyzePackage(packageUuid: string, triggeredByUserId?: number): Promise<AnalysisDashboardResponse> {
+  async analyzePackage(
+    packageUuid: string,
+    triggeredByUserId?: number,
+  ): Promise<AnalysisDashboardResponse> {
     const context = await this.buildBaseContext(packageUuid);
     const analysisRun = await this.packageAnalysisRunsRepository.save(
       this.packageAnalysisRunsRepository.create({
@@ -59,7 +62,8 @@ export class PackageAnalysisService {
     try {
       return await this.dataSource.transaction(async (manager) => {
         this.calculateFullContext(context);
-        const recommendationDrafts = this.recommendationEngineService.generateRecommendations(context);
+        const recommendationDrafts =
+          this.recommendationEngineService.generateRecommendations(context);
         const persisted = await this.analysisResultPersister.persistCompletedAnalysis(
           manager,
           analysisRun,
@@ -185,10 +189,12 @@ export class PackageAnalysisService {
 
   private calculateFullContext(context: AnalysisContext): void {
     context.financialMetrics = this.financialAnalysisService.calculateFinancialMetrics(context);
-    const itineraryAnalysis = this.itineraryFatigueAnalysisService.calculateItineraryFatigue(context);
+    const itineraryAnalysis =
+      this.itineraryFatigueAnalysisService.calculateItineraryFatigue(context);
     context.dailyFatigueResults = itineraryAnalysis.dailyFatigueResults;
     context.itineraryMetrics = itineraryAnalysis.itineraryMetrics;
-    context.costStructureMetrics = this.packageQualityScoreService.calculateCostStructureMetrics(context);
+    context.costStructureMetrics =
+      this.packageQualityScoreService.calculateCostStructureMetrics(context);
     context.qualityScore = this.packageQualityScoreService.calculateQualityScore(context);
   }
 
@@ -212,26 +218,53 @@ export class PackageAnalysisService {
       breakEvenGroupSize: this.toNumber(input.financialResult.breakEvenGroupSize),
     };
 
+    const calculatedFinancial = input.context?.financialMetrics;
     const expectedGroupSize = input.context?.package.expectedGroupSize ?? 0;
+    const sellingPricePerPerson = input.context
+      ? this.toNumber(input.context.package.sellingPricePerPerson)
+      : 0;
+
     const minTargetMarginPercent = input.context
       ? this.toNumber(input.context.configuration.minTargetMarginPercent)
       : 15;
+
     const targetMarginRatio = minTargetMarginPercent / 100;
-    const breakEvenSafetyTravelers = expectedGroupSize > 0 ? expectedGroupSize - financial.breakEvenGroupSize : 0;
-    const breakEvenUtilizationPercent =
-      expectedGroupSize > 0 ? (financial.breakEvenGroupSize / expectedGroupSize) * 100 : 0;
-    const requiredPriceForTargetMargin =
-      expectedGroupSize > 0 && targetMarginRatio < 1
-        ? financial.totalCost / expectedGroupSize / (1 - targetMarginRatio)
+
+    const fallbackBreakEvenGroupSizeRounded =
+      financial.contributionPerPerson > 0 ? Math.ceil(financial.breakEvenGroupSize) : 0;
+
+    const fallbackBreakEvenSafetyTravelers =
+      expectedGroupSize > 0 && financial.contributionPerPerson > 0
+        ? expectedGroupSize - fallbackBreakEvenGroupSizeRounded
         : 0;
-    const requiredCostReductionForTargetMargin = Math.max(
+
+    const fallbackBreakEvenUtilizationPercent =
+      expectedGroupSize > 0 && financial.contributionPerPerson > 0
+        ? (fallbackBreakEvenGroupSizeRounded / expectedGroupSize) * 100
+        : 100;
+
+    const fallbackRequiredPriceForTargetMargin =
+      expectedGroupSize > 0 && targetMarginRatio < 1
+        ? financial.totalCost / (expectedGroupSize * (1 - targetMarginRatio))
+        : 0;
+
+    const fallbackPriceGapPerPerson = fallbackRequiredPriceForTargetMargin - sellingPricePerPerson;
+
+    const fallbackRequiredCostReductionForTargetMargin = Math.max(
       0,
       financial.totalCost - financial.totalRevenue * (1 - targetMarginRatio),
     );
 
+    const fallbackCostPerPerson =
+      expectedGroupSize > 0 ? financial.totalCost / expectedGroupSize : 0;
+    const fallbackProfitPerPerson = sellingPricePerPerson - fallbackCostPerPerson;
+    const fallbackMarkupPercent =
+      financial.totalCost > 0 ? (financial.grossProfit / financial.totalCost) * 100 : 0;
+
     const dailyResults = input.dailyFatigueResults.map((result) => ({
       dayId: result.dayId,
-      dayNumber: input.context?.days.find((day) => day.id === result.dayId)?.dayNumber ?? result.dayId,
+      dayNumber:
+        input.context?.days.find((day) => day.id === result.dayId)?.dayNumber ?? result.dayId,
       activityLoad: this.toNumber(result.activityLoad),
       transferLoad: this.toNumber(result.transferLoad),
       intensityLoad: this.toNumber(result.intensityLoad),
@@ -244,11 +277,17 @@ export class PackageAnalysisService {
     }));
 
     const averageFatigueScore = dailyResults.length
-      ? this.round(dailyResults.reduce((sum, result) => sum + result.fatigueScore, 0) / dailyResults.length)
+      ? this.round(
+          dailyResults.reduce((sum, result) => sum + result.fatigueScore, 0) / dailyResults.length,
+        )
       : 0;
     const recommendationDtos = input.recommendations.map((recommendation) =>
       this.buildRecommendationDto(recommendation),
     );
+
+    const itineraryAnalysis = input.context
+      ? this.itineraryFatigueAnalysisService.calculateItineraryFatigue(input.context)
+      : undefined;
 
     return {
       analysisRun: {
@@ -259,26 +298,57 @@ export class PackageAnalysisService {
       },
       financial: {
         ...financial,
-        breakEvenSafetyTravelers: this.round(breakEvenSafetyTravelers),
-        breakEvenUtilizationPercent: this.round(breakEvenUtilizationPercent),
-        requiredPriceForTargetMargin: this.round(requiredPriceForTargetMargin),
-        requiredCostReductionForTargetMargin: this.round(requiredCostReductionForTargetMargin),
-        financialRiskLevel: this.resolveFinancialRiskLevel(
-          financial.grossProfit,
-          financial.contributionPerPerson,
-          financial.grossMarginPercent,
-          breakEvenUtilizationPercent,
-          minTargetMarginPercent,
-        ),
+
+        costPerPerson: calculatedFinancial?.costPerPerson ?? this.round(fallbackCostPerPerson),
+        profitPerPerson:
+          calculatedFinancial?.profitPerPerson ?? this.round(fallbackProfitPerPerson),
+
+        breakEvenGroupSizeRounded:
+          calculatedFinancial?.breakEvenGroupSizeRounded ?? fallbackBreakEvenGroupSizeRounded,
+
+        breakEvenSafetyTravelers:
+          calculatedFinancial?.breakEvenSafetyTravelers ??
+          this.round(fallbackBreakEvenSafetyTravelers),
+
+        breakEvenUtilizationPercent:
+          calculatedFinancial?.breakEvenUtilizationPercent ??
+          this.round(fallbackBreakEvenUtilizationPercent),
+
+        requiredPriceForTargetMargin:
+          calculatedFinancial?.requiredPriceForTargetMargin ??
+          this.round(fallbackRequiredPriceForTargetMargin),
+
+        priceGapPerPerson:
+          calculatedFinancial?.priceGapPerPerson ?? this.round(fallbackPriceGapPerPerson),
+
+        requiredCostReductionForTargetMargin:
+          calculatedFinancial?.requiredCostReductionForTargetMargin ??
+          this.round(fallbackRequiredCostReductionForTargetMargin),
+
+        markupPercent: calculatedFinancial?.markupPercent ?? this.round(fallbackMarkupPercent),
+
+        financialRiskLevel:
+          calculatedFinancial?.financialRiskLevel ??
+          this.resolveFinancialRiskLevel(
+            financial.grossProfit,
+            financial.contributionPerPerson,
+            financial.grossMarginPercent,
+            fallbackBreakEvenUtilizationPercent,
+            minTargetMarginPercent,
+          ),
+
+        categoryCostBreakdown: calculatedFinancial?.categoryCostBreakdown ?? [],
+        supplierCostBreakdown: calculatedFinancial?.supplierCostBreakdown ?? [],
       },
       itinerary: {
         itineraryBalanceScore: input.scoreResult.itineraryBalanceScore,
-        averageFatigueScore,
-        overloadedDaysCount: dailyResults.filter(
-          (result) => input.context && result.fatigueScore > input.context.configuration.maxDailyFatigueScore,
-        ).length,
-        criticalDaysCount: dailyResults.filter((result) => result.fatigueLevel === 'CRITICAL').length,
-        dailyResults,
+        averageFatigueScore: itineraryAnalysis?.averageFatigueScore ?? 0,
+        averageBalanceScore: itineraryAnalysis?.averageBalanceScore ?? 0,
+        overloadedDaysCount: itineraryAnalysis?.overloadedDaysCount ?? 0,
+        criticalDaysCount: itineraryAnalysis?.criticalDaysCount ?? 0,
+        consecutiveHighFatigueSequences: itineraryAnalysis?.consecutiveHighFatigueSequences ?? 0,
+        validationWarnings: itineraryAnalysis?.validationWarnings ?? [],
+        dailyResults: this.buildItineraryDailyResults(input.dailyFatigueResults, input.context),
       },
       quality: {
         overallScore: input.scoreResult.overallScore,
@@ -294,12 +364,15 @@ export class PackageAnalysisService {
           critical: recommendationDtos.filter(
             (recommendation) => recommendation.severity === RecommendationSeverity.CRITICAL,
           ).length,
-          high: recommendationDtos.filter((recommendation) => recommendation.severity === RecommendationSeverity.HIGH)
-            .length,
+          high: recommendationDtos.filter(
+            (recommendation) => recommendation.severity === RecommendationSeverity.HIGH,
+          ).length,
           medium: recommendationDtos.filter(
             (recommendation) => recommendation.severity === RecommendationSeverity.MEDIUM,
           ).length,
-          low: recommendationDtos.filter((recommendation) => recommendation.severity === RecommendationSeverity.LOW).length,
+          low: recommendationDtos.filter(
+            (recommendation) => recommendation.severity === RecommendationSeverity.LOW,
+          ).length,
         },
         topRecommendations: recommendationDtos.slice(0, 8),
         groups: {
@@ -383,7 +456,9 @@ export class PackageAnalysisService {
     return [...results].sort((a, b) => a.dayId - b.dayId);
   }
 
-  private sortRecommendations(recommendations: GeneratedRecommendation[]): GeneratedRecommendation[] {
+  private sortRecommendations(
+    recommendations: GeneratedRecommendation[],
+  ): GeneratedRecommendation[] {
     return [...recommendations].sort(
       (a, b) => this.getSeverityOrder(a.severity) - this.getSeverityOrder(b.severity),
     );
@@ -411,5 +486,49 @@ export class PackageAnalysisService {
 
   private round(value: number): number {
     return Math.round(value * 100) / 100;
+  }
+
+  private buildItineraryDailyResults(
+    dailyResults: DailyFatigueResult[],
+    context?: AnalysisContext,
+  ): AnalysisDashboardResponse['itinerary']['dailyResults'] {
+    const itineraryMetricsByDayId = new Map(
+      (context?.itineraryMetrics ?? []).map((metric) => [metric.dayId, metric]),
+    );
+
+    return dailyResults
+      .sort((a, b) => a.dayId - b.dayId)
+      .map((result) => {
+        const metric = itineraryMetricsByDayId.get(result.dayId);
+
+        return {
+          dayId: result.dayId,
+          dayNumber: metric?.dayNumber ?? 0,
+          title: metric?.title,
+
+          activityCount: metric?.activityCount ?? 0,
+          transferMinutes: metric?.transferMinutes ?? 0,
+          flightMinutes: metric?.flightMinutes ?? 0,
+          freeTimeMinutes: metric?.freeTimeMinutes ?? 0,
+          mealMinutes: metric?.mealMinutes ?? 0,
+          dayDurationMinutes: metric?.dayDurationMinutes ?? 0,
+
+          activityLoad: this.toNumber(result.activityLoad),
+          transferLoad: this.toNumber(result.transferLoad),
+          intensityLoad: this.toNumber(result.intensityLoad),
+          compressionPenalty: this.toNumber(result.compressionPenalty),
+          restCredit: this.toNumber(result.restCredit),
+
+          fatigueScore: result.fatigueScore,
+          balanceScore: result.balanceScore,
+          fatigueLevel: result.fatigueLevel,
+
+          transferSharePercent: metric?.transferSharePercent ?? 0,
+          activityDensity: metric?.activityDensity ?? 0,
+          restRatioPercent: metric?.restRatioPercent ?? 0,
+
+          reasons: result.reasons,
+        };
+      });
   }
 }

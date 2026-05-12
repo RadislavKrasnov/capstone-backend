@@ -15,14 +15,15 @@ export class InsufficientRestTimeRule implements RecommendationRule {
     const itineraryMetrics = context.itineraryMetrics ?? [];
 
     return itineraryMetrics
-      .filter((metric) => metric.activityCount >= 3 && metric.freeTimeMinutes < 60)
+      .filter((metric) => metric.activityCount >= 4 && metric.freeTimeMinutes < 60)
       .map((metric) => ({
         ruleCode: this.code,
         category: this.category,
         severity: RecommendationSeverity.MEDIUM,
         title: `Day ${metric.dayNumber} has insufficient rest time`,
         explanation: `The day has ${metric.activityCount} activities but only ${metric.freeTimeMinutes} minutes of free time.`,
-        suggestedAction: 'Add at least one recovery block or reduce the number of non-essential activities.',
+        suggestedAction:
+          'Add at least 60 minutes of free time or remove one non-essential activity.',
         affectedMetric: 'freeTimeMinutes',
         affectedDayId: metric.dayId,
       }));

@@ -19,10 +19,14 @@ export class ShortBuffersRule implements RecommendationRule {
       .map((metric) => ({
         ruleCode: this.code,
         category: this.category,
-        severity: RecommendationSeverity.MEDIUM,
+        severity:
+          metric.shortBufferCount >= 3
+            ? RecommendationSeverity.HIGH
+            : RecommendationSeverity.MEDIUM,
         title: `Day ${metric.dayNumber} has short operational buffers`,
         explanation: `${metric.shortBufferCount} transition(s) have less than ${context.configuration.minBufferMinutes} minutes of buffer time.`,
-        suggestedAction: 'Increase time between activities to reduce delays and execution risk.',
+        suggestedAction:
+          'Add buffer time between major activities and transfers to reduce delay risk.',
         affectedMetric: 'shortBufferCount',
         affectedDayId: metric.dayId,
       }));

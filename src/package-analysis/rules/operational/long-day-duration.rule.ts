@@ -15,14 +15,18 @@ export class LongDayDurationRule implements RecommendationRule {
     const itineraryMetrics = context.itineraryMetrics ?? [];
 
     return itineraryMetrics
-      .filter((metric) => metric.dayDurationMinutes > 10 * 60)
+      .filter((metric) => metric.dayDurationMinutes > 12 * 60)
       .map((metric) => ({
         ruleCode: this.code,
         category: this.category,
-        severity: RecommendationSeverity.MEDIUM,
+        severity:
+          metric.dayDurationMinutes > 14 * 60
+            ? RecommendationSeverity.HIGH
+            : RecommendationSeverity.MEDIUM,
         title: `Day ${metric.dayNumber} is operationally long`,
         explanation: `The planned active day is approximately ${Math.round(metric.dayDurationMinutes / 60)} hours long.`,
-        suggestedAction: 'Shorten the day or move non-essential activities to another day.',
+        suggestedAction:
+          'Shorten the day, move an evening activity, or add a later start the next day.',
         affectedMetric: 'dayDurationMinutes',
         affectedDayId: metric.dayId,
       }));

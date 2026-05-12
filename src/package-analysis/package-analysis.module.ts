@@ -43,6 +43,9 @@ import { FinancialAnalysisService } from './services/financial-analysis.service'
 import { ItineraryFatigueAnalysisService } from './services/itinerary-fatigue-analysis.service';
 import { PackageQualityScoreService } from './services/package-quality-score.service';
 import { RecommendationEngineService } from './services/recommendation-engine.service';
+import { HighFixedCostExposureRule } from './rules/financial/high-fixed-cost-exposure.rule';
+import { VeryLowMarginRule } from './rules/financial/very-low-margin.rule';
+import { HighActivityDensityRule } from './rules/operational/high-activity-density.rule';
 
 @Module({
   imports: [
@@ -91,6 +94,9 @@ import { RecommendationEngineService } from './services/recommendation-engine.se
     HighOtherCostShareRule,
     LowQualityScoreRule,
     WeakSubScoreRule,
+    VeryLowMarginRule,
+    HighFixedCostExposureRule,
+    HighActivityDensityRule,
   ],
   exports: [PackageAnalysisService],
 })

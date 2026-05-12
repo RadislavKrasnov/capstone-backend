@@ -15,16 +15,28 @@ export class ExcessiveTransferTimeRule implements RecommendationRule {
     const itineraryMetrics = context.itineraryMetrics ?? [];
 
     return itineraryMetrics
-      .filter((metric) => metric.transferMinutes + metric.flightMinutes > context.configuration.maxTransferMinutesPerDay)
-      .map((metric) => ({
-        ruleCode: this.code,
-        category: this.category,
-        severity: RecommendationSeverity.HIGH,
-        title: `Day ${metric.dayNumber} has excessive transfer time`,
-        explanation: `Transfer and flight time is ${metric.transferMinutes + metric.flightMinutes} minutes, above the configured limit of ${context.configuration.maxTransferMinutesPerDay} minutes.`,
-        suggestedAction: 'Split the route, replace one transfer with a nearer activity, or add an overnight stop.',
-        affectedMetric: 'transferMinutes',
-        affectedDayId: metric.dayId,
-      }));
+      .filter(
+        (metric) =>
+          metric.transferMinutes + metric.flightMinutes >
+          context.configuration.maxTransferMinutesPerDay,
+      )
+      .map((metric) => {
+        const totalTransferMinutes = metric.transferMinutes + metric.flightMinutes;
+
+        return {
+          ruleCode: this.code,
+          category: this.category,
+          severity:
+            totalTransferMinutes > 240
+              ? RecommendationSeverity.HIGH
+              : RecommendationSeverity.MEDIUM,
+          title: `Day ${metric.dayNumber} has excessive transfer time`,
+          explanation: `Transfer and flight time is ${totalTransferMinutes} minutes, above the configured limit of ${context.configuration.maxTransferMinutesPerDay} minutes.`,
+          suggestedAction:
+            'Reorder activities geographically, replace distant attractions, or split the route across days.',
+          affectedMetric: 'transferMinutes',
+          affectedDayId: metric.dayId,
+        };
+      });
   }
 }
