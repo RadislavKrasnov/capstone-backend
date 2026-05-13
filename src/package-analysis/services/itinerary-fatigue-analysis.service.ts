@@ -35,6 +35,7 @@ export class ItineraryFatigueAnalysisService {
         day.id,
         day.dayNumber,
         day.title,
+        day.isRestDay,
         items,
         context.configuration.minBufferMinutes,
       );
@@ -95,6 +96,7 @@ export class ItineraryFatigueAnalysisService {
     dayId: number,
     dayNumber: number,
     title: string | undefined,
+    isRestDay: boolean,
     items: ItineraryItem[],
     minBufferMinutes: number,
   ): DayItineraryMetric {
@@ -118,6 +120,7 @@ export class ItineraryFatigueAnalysisService {
       dayId,
       dayNumber,
       title,
+      isRestDay,
 
       activityCount: activityItems.length,
       majorActivityCount: activityItems.filter((item) => item.isMajorActivity).length,
@@ -213,6 +216,10 @@ export class ItineraryFatigueAnalysisService {
   private calculateBalanceScore(dayMetric: DayItineraryMetric, fatigueScore: number): number {
     let balanceScore = this.clamp(100 - fatigueScore, 0, 100);
 
+    if (dayMetric.isRestDay) {
+      return balanceScore;
+    }
+
     if (dayMetric.activityCount === 0 && dayMetric.freeTimeMinutes < 240) {
       balanceScore = Math.min(balanceScore, 60);
     }
@@ -305,11 +312,19 @@ export class ItineraryFatigueAnalysisService {
       reasons.push('Activity density is high, which may make the schedule feel rushed.');
     }
 
-    if (dayMetric.activityCount === 0 && dayMetric.freeTimeMinutes < 240) {
+    if (dayMetric.activityCount === 0 && dayMetric.isRestDay) {
+      reasons.push('The day is marked as a planned rest day.');
+    }
+
+    if (!dayMetric.isRestDay && dayMetric.activityCount === 0 && dayMetric.freeTimeMinutes < 240) {
       reasons.push('The day appears underfilled and may reduce perceived package value.');
     }
 
-    if (dayMetric.activityCount === 1 && dayMetric.dayDurationMinutes < 240) {
+    if (
+      !dayMetric.isRestDay &&
+      dayMetric.activityCount === 1 &&
+      dayMetric.dayDurationMinutes < 240
+    ) {
       reasons.push('The day has only one short planned activity and may feel weakly filled.');
     }
 

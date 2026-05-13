@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 
@@ -50,6 +50,9 @@ export class PackageAnalysisService {
     triggeredByUserId?: number,
   ): Promise<AnalysisDashboardResponse> {
     const context = await this.buildBaseContext(packageUuid);
+
+    this.validateAnalysisCompleteness(context);
+
     const analysisRun = await this.packageAnalysisRunsRepository.save(
       this.packageAnalysisRunsRepository.create({
         packageId: context.package.id,
@@ -62,8 +65,10 @@ export class PackageAnalysisService {
     try {
       return await this.dataSource.transaction(async (manager) => {
         this.calculateFullContext(context);
+
         const recommendationDrafts =
           this.recommendationEngineService.generateRecommendations(context);
+
         const persisted = await this.analysisResultPersister.persistCompletedAnalysis(
           manager,
           analysisRun,
@@ -261,26 +266,6 @@ export class PackageAnalysisService {
     const fallbackMarkupPercent =
       financial.totalCost > 0 ? (financial.grossProfit / financial.totalCost) * 100 : 0;
 
-    const dailyResults = input.dailyFatigueResults.map((result) => ({
-      dayId: result.dayId,
-      dayNumber:
-        input.context?.days.find((day) => day.id === result.dayId)?.dayNumber ?? result.dayId,
-      activityLoad: this.toNumber(result.activityLoad),
-      transferLoad: this.toNumber(result.transferLoad),
-      intensityLoad: this.toNumber(result.intensityLoad),
-      compressionPenalty: this.toNumber(result.compressionPenalty),
-      restCredit: this.toNumber(result.restCredit),
-      fatigueScore: result.fatigueScore,
-      balanceScore: result.balanceScore,
-      fatigueLevel: result.fatigueLevel,
-      reasons: result.reasons,
-    }));
-
-    const averageFatigueScore = dailyResults.length
-      ? this.round(
-          dailyResults.reduce((sum, result) => sum + result.fatigueScore, 0) / dailyResults.length,
-        )
-      : 0;
     const recommendationDtos = input.recommendations.map((recommendation) =>
       this.buildRecommendationDto(recommendation),
     );
@@ -505,6 +490,7 @@ export class PackageAnalysisService {
           dayId: result.dayId,
           dayNumber: metric?.dayNumber ?? 0,
           title: metric?.title,
+          isRestDay: metric?.isRestDay ?? false,
 
           activityCount: metric?.activityCount ?? 0,
           transferMinutes: metric?.transferMinutes ?? 0,
@@ -530,5 +516,24 @@ export class PackageAnalysisService {
           reasons: result.reasons,
         };
       });
+  }
+
+  private validateAnalysisCompleteness(context: AnalysisContext): void {
+    const blockingRecommendations = this.recommendationEngineService
+      .generateRecommendations(context)
+      .filter((recommendation) =>
+        ['MISSING_COST_DATA', 'MISSING_ITINERARY_DATA'].includes(recommendation.ruleCode),
+      );
+
+    if (!blockingRecommendations.length) {
+      return;
+    }
+
+    throw new BadRequestException({
+      message: 'Package cannot be analyzed because required analysis data is missing.',
+      recommendations: blockingRecommendations.map((recommendation) =>
+        this.buildRecommendationDto(recommendation),
+      ),
+    });
   }
 }

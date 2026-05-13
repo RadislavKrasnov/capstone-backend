@@ -46,6 +46,9 @@ export class TourDay {
   @Column({ type: 'text', nullable: true })
   description?: string | null;
 
+  @Column({ name: 'is_rest_day', type: 'boolean', default: false })
+  isRestDay: boolean;
+
   @OneToMany(() => ItineraryItem, (item) => item.day)
   items: ItineraryItem[];
 

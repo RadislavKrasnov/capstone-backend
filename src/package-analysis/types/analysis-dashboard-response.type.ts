@@ -81,6 +81,7 @@ export type AnalysisDashboardResponse = {
       dayId: number;
       dayNumber: number;
       title?: string;
+      isRestDay: boolean;
 
       activityCount: number;
       transferMinutes: number;

@@ -17,8 +17,9 @@ export class UnderfilledDayRule implements RecommendationRule {
     return itineraryMetrics
       .filter(
         (metric) =>
-          (metric.activityCount === 0 && metric.freeTimeMinutes < 240) ||
-          (metric.activityCount === 1 && metric.dayDurationMinutes < 240),
+          !metric.isRestDay &&
+          ((metric.activityCount === 0 && metric.freeTimeMinutes < 240) ||
+            (metric.activityCount === 1 && metric.dayDurationMinutes < 240)),
       )
       .map((metric) => ({
         ruleCode: this.code,
@@ -28,7 +29,7 @@ export class UnderfilledDayRule implements RecommendationRule {
         title: `Day ${metric.dayNumber} may be underfilled`,
         explanation:
           metric.activityCount === 0
-            ? 'The day has no planned activity and does not appear to contain enough free time to be clearly positioned as a rest day.'
+            ? 'The day has no planned activity and does not appear to be marked as an intentional rest day.'
             : 'The day has only one short planned activity, which may reduce perceived package value.',
         suggestedAction:
           'Add a meaningful activity, mark the day as a rest day, or improve the public day description.',

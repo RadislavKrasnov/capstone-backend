@@ -4,6 +4,7 @@ export type DayItineraryMetric = {
   dayId: number;
   dayNumber: number;
   title?: string;
+  isRestDay: boolean;
 
   activityCount: number;
   majorActivityCount: number;
