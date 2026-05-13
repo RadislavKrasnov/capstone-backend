@@ -21,7 +21,9 @@ export class PackageQualityScoreService {
 
     return {
       fixedCostSharePercent:
-        financial.totalCost > 0 ? this.round((financial.fixedCostTotal / financial.totalCost) * 100) : 0,
+        financial.totalCost > 0
+          ? this.round((financial.fixedCostTotal / financial.totalCost) * 100)
+          : 0,
       largestSupplierSharePercent: financial.supplierCostBreakdown[0]?.sharePercent ?? 0,
       largestCostCategorySharePercent: financial.categoryCostBreakdown[0]?.sharePercent ?? 0,
       requiredCostItemsCount: context.costItems.length,
@@ -32,25 +34,37 @@ export class PackageQualityScoreService {
     const financial = this.requireFinancialMetrics(context);
     const dailyFatigueResults = context.dailyFatigueResults ?? [];
     const itineraryMetrics = context.itineraryMetrics ?? [];
-    const costStructureMetrics = context.costStructureMetrics ?? this.calculateCostStructureMetrics(context);
+    const costStructureMetrics =
+      context.costStructureMetrics ?? this.calculateCostStructureMetrics(context);
 
+    const expectedGroupSize = this.toNumber(context.package.expectedGroupSize);
     const minTargetMargin = this.toNumber(context.configuration.minTargetMarginPercent);
     const goodMargin = this.toNumber(context.configuration.goodMarginPercent);
+    const maxDailyFatigueScore = this.toNumber(context.configuration.maxDailyFatigueScore);
+    const maxTransferMinutesPerDay = this.toNumber(context.configuration.maxTransferMinutesPerDay);
 
-    const profitabilityScore = this.calculateProfitabilityScore(
-      financial.grossMarginPercent,
-      minTargetMargin,
-      goodMargin,
-      financial.breakEvenUtilizationPercent,
-      financial.contributionPerPerson,
-      financial.grossProfit,
+    const profitabilityScore = this.calculateProfitabilityScore({
+      grossMarginPercent: financial.grossMarginPercent,
+      minTargetMarginPercent: minTargetMargin,
+      goodMarginPercent: goodMargin,
+      breakEvenUtilizationPercent: financial.breakEvenUtilizationPercent,
+      contributionPerPerson: financial.contributionPerPerson,
+      grossProfit: financial.grossProfit,
+      expectedGroupSize,
+      breakEvenGroupSizeRounded: financial.breakEvenGroupSizeRounded,
+    });
+
+    const itineraryBalanceScore = this.calculateItineraryBalanceScore(
+      dailyFatigueResults,
+      maxDailyFatigueScore,
     );
-    const itineraryBalanceScore = this.calculateItineraryBalanceScore(dailyFatigueResults);
+
     const operationalFeasibilityScore = this.calculateOperationalFeasibilityScore(
       itineraryMetrics,
-      context.configuration.maxTransferMinutesPerDay,
+      maxTransferMinutesPerDay,
     );
-    const costStructureScore = this.calculateCostStructureScore(costStructureMetrics, financial.categoryCostBreakdown);
+
+    const costStructureScore = this.calculateCostStructureScore(context, costStructureMetrics);
 
     let overallScore = Math.round(
       profitabilityScore * 0.35 +
@@ -63,31 +77,62 @@ export class PackageQualityScoreService {
 
     if (financial.grossProfit < 0) {
       overallScore = Math.min(overallScore, 45);
-      appliedCaps.push({ code: 'NEGATIVE_PROFIT_CAP', description: 'Gross profit is negative.', cappedAt: 45 });
+      appliedCaps.push({
+        code: 'NEGATIVE_PROFIT_CAP',
+        description:
+          'Gross profit is negative, so the package cannot receive a healthy quality score.',
+        cappedAt: 45,
+      });
     }
 
     if (financial.contributionPerPerson <= 0) {
       overallScore = Math.min(overallScore, 35);
-      appliedCaps.push({ code: 'NON_POSITIVE_CONTRIBUTION_CAP', description: 'Contribution per person is not positive.', cappedAt: 35 });
+      appliedCaps.push({
+        code: 'NON_POSITIVE_CONTRIBUTION_CAP',
+        description:
+          'Contribution per person is not positive, so each additional traveler does not improve profitability.',
+        cappedAt: 35,
+      });
     }
 
     const criticalFatigueDayCount = dailyFatigueResults.filter(
       (result) => result.fatigueLevel === FatigueLevel.CRITICAL,
     ).length;
 
-    if (criticalFatigueDayCount >= 1) {
-      overallScore = Math.min(overallScore, 75);
-      appliedCaps.push({ code: 'CRITICAL_FATIGUE_CAP', description: 'At least one day has critical fatigue.', cappedAt: 75 });
-    }
-
     if (criticalFatigueDayCount >= 2) {
       overallScore = Math.min(overallScore, 65);
-      appliedCaps.push({ code: 'MULTIPLE_CRITICAL_FATIGUE_CAP', description: 'Multiple days have critical fatigue.', cappedAt: 65 });
+      appliedCaps.push({
+        code: 'MULTIPLE_CRITICAL_FATIGUE_DAYS_CAP',
+        description: 'Multiple itinerary days have critical fatigue.',
+        cappedAt: 65,
+      });
+    } else if (criticalFatigueDayCount >= 1) {
+      overallScore = Math.min(overallScore, 75);
+      appliedCaps.push({
+        code: 'CRITICAL_FATIGUE_DAY_CAP',
+        description: 'At least one itinerary day has critical fatigue.',
+        cappedAt: 75,
+      });
     }
 
-    if (!context.costItems.length || !context.itineraryItems.length) {
+    if (costStructureMetrics.requiredCostItemsCount === 0) {
       overallScore = Math.min(overallScore, 50);
-      appliedCaps.push({ code: 'MISSING_INPUT_DATA_CAP', description: 'Cost or itinerary input data is missing.', cappedAt: 50 });
+      appliedCaps.push({
+        code: 'NO_REQUIRED_COSTS_CAP',
+        description:
+          'No required cost items are available, so cost and profitability quality cannot be trusted.',
+        cappedAt: 50,
+      });
+    }
+
+    if (context.days.length === 0 || context.itineraryItems.length === 0) {
+      overallScore = Math.min(overallScore, 50);
+      appliedCaps.push({
+        code: 'NO_ITINERARY_DATA_CAP',
+        description:
+          'No itinerary data is available, so customer experience quality cannot be fully evaluated.',
+        cappedAt: 50,
+      });
     }
 
     return {
@@ -100,36 +145,89 @@ export class PackageQualityScoreService {
     };
   }
 
-  private calculateProfitabilityScore(
-    margin: number,
-    minTargetMargin: number,
-    goodMargin: number,
-    breakEvenUtilization: number,
-    contributionPerPerson: number,
-    grossProfit: number,
-  ): number {
-    if (grossProfit < 0 || contributionPerPerson <= 0) {
+  private calculateProfitabilityScore(input: {
+    grossMarginPercent: number;
+    minTargetMarginPercent: number;
+    goodMarginPercent: number;
+    breakEvenUtilizationPercent: number;
+    contributionPerPerson: number;
+    grossProfit: number;
+    expectedGroupSize: number;
+    breakEvenGroupSizeRounded: number;
+  }): number {
+    if (input.contributionPerPerson <= 0) {
+      return 0;
+    }
+
+    if (input.grossProfit < 0) {
+      return 0;
+    }
+
+    if (input.expectedGroupSize < input.breakEvenGroupSizeRounded) {
       return 20;
     }
 
-    const marginScore = margin >= goodMargin ? 100 : margin <= 0 ? 20 : 20 + (margin / goodMargin) * 80;
-    const targetPenalty = margin < minTargetMargin ? (minTargetMargin - margin) * 2 : 0;
-    const breakEvenPenalty = breakEvenUtilization > 80 ? (breakEvenUtilization - 80) * 1.5 : 0;
-
-    return this.clamp(Math.round(marginScore - targetPenalty - breakEvenPenalty), 0, 100);
-  }
-
-  private calculateItineraryBalanceScore(dailyFatigueResults: AnalysisContext['dailyFatigueResults']): number {
-    if (!dailyFatigueResults?.length) {
-      return 50;
+    if (
+      input.grossMarginPercent >= input.goodMarginPercent &&
+      input.breakEvenUtilizationPercent < 60
+    ) {
+      return 100;
     }
 
-    const averageBalance = dailyFatigueResults.reduce((sum, result) => sum + result.balanceScore, 0) / dailyFatigueResults.length;
-    const highFatiguePenalty = dailyFatigueResults.filter(
-      (result) => result.fatigueLevel === FatigueLevel.HIGH || result.fatigueLevel === FatigueLevel.CRITICAL,
-    ).length * 5;
+    if (input.grossMarginPercent >= input.goodMarginPercent) {
+      return 90;
+    }
 
-    return this.clamp(Math.round(averageBalance - highFatiguePenalty), 0, 100);
+    if (
+      input.grossMarginPercent >= input.minTargetMarginPercent &&
+      input.breakEvenUtilizationPercent < 80
+    ) {
+      return 80;
+    }
+
+    if (input.grossMarginPercent >= input.minTargetMarginPercent) {
+      return 70;
+    }
+
+    if (input.grossMarginPercent >= 10) {
+      return 45;
+    }
+
+    if (input.grossMarginPercent >= 0) {
+      return 25;
+    }
+
+    return 0;
+  }
+
+  private calculateItineraryBalanceScore(
+    dailyFatigueResults: AnalysisContext['dailyFatigueResults'],
+    maxDailyFatigueScore: number,
+  ): number {
+    if (!dailyFatigueResults?.length) {
+      return 0;
+    }
+
+    const averageDailyBalance =
+      dailyFatigueResults.reduce((sum, result) => sum + result.balanceScore, 0) /
+      dailyFatigueResults.length;
+
+    const criticalDayPenalty =
+      dailyFatigueResults.filter((result) => result.fatigueLevel === FatigueLevel.CRITICAL).length *
+      5;
+
+    const consecutiveHighFatiguePenalty = this.hasConsecutiveHighFatigueDays(
+      dailyFatigueResults,
+      maxDailyFatigueScore,
+    )
+      ? 10
+      : 0;
+
+    return this.clamp(
+      Math.round(averageDailyBalance - criticalDayPenalty - consecutiveHighFatiguePenalty),
+      0,
+      100,
+    );
   }
 
   private calculateOperationalFeasibilityScore(
@@ -140,56 +238,137 @@ export class PackageQualityScoreService {
       return 50;
     }
 
+    let shortBufferCount = 0;
+    let transferHeavyPenalty = 0;
+    let longDayPenalty = 0;
+    let lateFinishEarlyStartPenalty = 0;
+    let missingTimingDataPenalty = 0;
+    let majorItemsCount = 0;
+    let missingTimingItemsCount = 0;
+
+    const sortedMetrics = [...itineraryMetrics].sort((a, b) => a.dayNumber - b.dayNumber);
+
+    for (const metric of sortedMetrics) {
+      shortBufferCount += metric.shortBufferCount;
+
+      const totalTransferMinutes = metric.transferMinutes + metric.flightMinutes;
+
+      if (totalTransferMinutes > 240) {
+        transferHeavyPenalty += 20;
+      } else if (totalTransferMinutes > maxTransferMinutesPerDay) {
+        transferHeavyPenalty += 10;
+      }
+
+      if (metric.dayDurationMinutes > 14 * 60) {
+        longDayPenalty += 20;
+      } else if (metric.dayDurationMinutes > 12 * 60) {
+        longDayPenalty += 10;
+      }
+
+      majorItemsCount += metric.activityCount + metric.majorActivityCount;
+      missingTimingItemsCount += metric.missingDurationCount + metric.invalidTimingCount;
+    }
+
+    for (let index = 1; index < sortedMetrics.length; index += 1) {
+      const previous = sortedMetrics[index - 1];
+      const current = sortedMetrics[index];
+
+      if (previous.finishesLate && current.startsEarly) {
+        lateFinishEarlyStartPenalty += 10;
+      }
+    }
+
+    if (majorItemsCount > 0 && missingTimingItemsCount / majorItemsCount > 0.2) {
+      missingTimingDataPenalty = 10;
+    }
+
+    const shortBufferPenalty = Math.min(shortBufferCount * 10, 30);
+
+    const totalPenalty =
+      shortBufferPenalty +
+      transferHeavyPenalty +
+      longDayPenalty +
+      lateFinishEarlyStartPenalty +
+      missingTimingDataPenalty;
+
+    return this.clamp(100 - totalPenalty, 0, 100);
+  }
+
+  private calculateCostStructureScore(
+    context: AnalysisContext,
+    costStructureMetrics: CostStructureMetrics,
+  ): number {
+    const financial = this.requireFinancialMetrics(context);
+
+    if (costStructureMetrics.requiredCostItemsCount === 0) {
+      return 0;
+    }
+
     let penalty = 0;
 
-    for (const metric of itineraryMetrics) {
-      if (metric.transferMinutes + metric.flightMinutes > maxTransferMinutesPerDay) {
-        penalty += 8;
-      }
+    const hotelShare = this.getCategorySharePercent(context, CostCategory.HOTEL);
+    const transportShare = this.getCategorySharePercent(context, CostCategory.TRANSPORT);
+    const flightShare = this.getCategorySharePercent(context, CostCategory.FLIGHT);
+    const otherShare = this.getCategorySharePercent(context, CostCategory.OTHER);
 
-      penalty += metric.shortBufferCount * 4;
+    if (hotelShare > 45) {
+      penalty += 15;
+    }
 
-      if (metric.dayDurationMinutes > 10 * 60) {
-        penalty += 6;
-      }
+    if (transportShare > 35) {
+      penalty += 15;
+    }
 
-      if (!metric.hasMealBreak && metric.activityCount >= 3) {
-        penalty += 5;
-      }
+    if (flightShare > 50) {
+      penalty += 10;
+    }
+
+    if (otherShare > 25) {
+      penalty += 10;
+    }
+
+    if (costStructureMetrics.largestSupplierSharePercent > 50) {
+      penalty += 20;
+    } else if (costStructureMetrics.largestSupplierSharePercent > 35) {
+      penalty += 10;
+    }
+
+    if (
+      costStructureMetrics.fixedCostSharePercent > 50 &&
+      financial.breakEvenUtilizationPercent > 80
+    ) {
+      penalty += 15;
     }
 
     return this.clamp(100 - penalty, 0, 100);
   }
 
-  private calculateCostStructureScore(
-    costStructureMetrics: CostStructureMetrics,
-    categoryBreakdown: Array<{ category: string; sharePercent: number }>,
-  ): number {
-    if (!costStructureMetrics.requiredCostItemsCount) {
-      return 40;
+  private getCategorySharePercent(context: AnalysisContext, category: CostCategory): number {
+    return (
+      context.financialMetrics?.categoryCostBreakdown.find((item) => item.category === category)
+        ?.sharePercent ?? 0
+    );
+  }
+
+  private hasConsecutiveHighFatigueDays(
+    dailyFatigueResults: NonNullable<AnalysisContext['dailyFatigueResults']>,
+    maxDailyFatigueScore: number,
+  ): boolean {
+    const sortedResults = [...dailyFatigueResults].sort((a, b) => a.dayNumber - b.dayNumber);
+
+    for (let index = 1; index < sortedResults.length; index += 1) {
+      const previous = sortedResults[index - 1];
+      const current = sortedResults[index];
+
+      if (
+        previous.fatigueScore > maxDailyFatigueScore &&
+        current.fatigueScore > maxDailyFatigueScore
+      ) {
+        return true;
+      }
     }
 
-    let penalty = 0;
-
-    if (costStructureMetrics.largestSupplierSharePercent > 60) {
-      penalty += (costStructureMetrics.largestSupplierSharePercent - 60) * 0.8;
-    }
-
-    if (costStructureMetrics.largestCostCategorySharePercent > 70) {
-      penalty += (costStructureMetrics.largestCostCategorySharePercent - 70) * 0.7;
-    }
-
-    const otherShare = categoryBreakdown.find((item) => item.category === CostCategory.OTHER)?.sharePercent ?? 0;
-
-    if (otherShare > 20) {
-      penalty += (otherShare - 20) * 1.2;
-    }
-
-    if (costStructureMetrics.fixedCostSharePercent > 75) {
-      penalty += (costStructureMetrics.fixedCostSharePercent - 75) * 0.5;
-    }
-
-    return this.clamp(Math.round(100 - penalty), 0, 100);
+    return false;
   }
 
   private requireFinancialMetrics(context: AnalysisContext) {
@@ -200,7 +379,11 @@ export class PackageQualityScoreService {
     return context.financialMetrics;
   }
 
-  private toNumber(value: string | number): number {
+  private toNumber(value: string | number | null | undefined): number {
+    if (value === null || value === undefined) {
+      return 0;
+    }
+
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : 0;
   }

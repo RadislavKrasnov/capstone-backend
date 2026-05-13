@@ -18,16 +18,56 @@ export class LowQualityScoreRule implements RecommendationRule {
       return [];
     }
 
+    const weakestArea = this.resolveWeakestArea(qualityScore);
+
     return [
       {
         ruleCode: this.code,
-        category: this.category,
-        severity: qualityScore.overallScore < 40 ? RecommendationSeverity.CRITICAL : RecommendationSeverity.HIGH,
+        category: weakestArea.category,
+        severity:
+          qualityScore.overallScore < 40
+            ? RecommendationSeverity.CRITICAL
+            : RecommendationSeverity.HIGH,
         title: 'Overall package quality is too low for publication',
-        explanation: `Overall quality score is ${qualityScore.overallScore}/100. Publishing this package may create financial or customer-experience risk.`,
-        suggestedAction: 'Resolve the highest-severity recommendations before publishing the package.',
+        explanation: `Overall quality score is ${qualityScore.overallScore}/100. The weakest area is ${weakestArea.label}, which should be reviewed before publishing.`,
+        suggestedAction: weakestArea.action,
         affectedMetric: 'overallScore',
       },
     ];
+  }
+
+  private resolveWeakestArea(qualityScore: NonNullable<AnalysisContext['qualityScore']>) {
+    const areas = [
+      {
+        metric: 'profitabilityScore',
+        label: 'profitability',
+        score: qualityScore.profitabilityScore,
+        category: RecommendationCategory.FINANCIAL,
+        action: 'Review price, group size, fixed costs, and variable cost per person.',
+      },
+      {
+        metric: 'itineraryBalanceScore',
+        label: 'itinerary balance',
+        score: qualityScore.itineraryBalanceScore,
+        category: RecommendationCategory.ITINERARY,
+        action: 'Reduce overloaded days, add rest periods, or distribute activities more evenly.',
+      },
+      {
+        metric: 'operationalFeasibilityScore',
+        label: 'operational feasibility',
+        score: qualityScore.operationalFeasibilityScore,
+        category: RecommendationCategory.OPERATIONAL,
+        action: 'Add buffers, reduce transfer-heavy days, and fix unrealistic timing.',
+      },
+      {
+        metric: 'costStructureScore',
+        label: 'cost structure',
+        score: qualityScore.costStructureScore,
+        category: RecommendationCategory.COST_STRUCTURE,
+        action: 'Review dominant cost categories, supplier concentration, and fixed cost exposure.',
+      },
+    ];
+
+    return areas.sort((a, b) => a.score - b.score)[0];
   }
 }
