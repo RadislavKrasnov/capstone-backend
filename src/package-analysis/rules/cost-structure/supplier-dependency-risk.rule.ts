@@ -14,7 +14,7 @@ export class SupplierDependencyRiskRule implements RecommendationRule {
   evaluate(context: AnalysisContext): RecommendationDraft[] {
     const largestSupplier = context.financialMetrics?.supplierCostBreakdown[0];
 
-    if (!largestSupplier || largestSupplier.sharePercent <= 60) {
+    if (!largestSupplier || largestSupplier.sharePercent <= 35) {
       return [];
     }
 
@@ -23,10 +23,13 @@ export class SupplierDependencyRiskRule implements RecommendationRule {
         ruleCode: this.code,
         category: this.category,
         severity:
-          largestSupplier.sharePercent > 75 ? RecommendationSeverity.HIGH : RecommendationSeverity.MEDIUM,
+          largestSupplier.sharePercent > 50
+            ? RecommendationSeverity.HIGH
+            : RecommendationSeverity.MEDIUM,
         title: 'High dependency on one supplier',
-        explanation: `${largestSupplier.supplierName} represents ${largestSupplier.sharePercent.toFixed(2)}% of total required costs.`,
-        suggestedAction: 'Negotiate alternatives or split critical services between suppliers.',
+        explanation: `${largestSupplier.supplierName} represents ${largestSupplier.sharePercent.toFixed(2)}% of total required costs. This creates pricing and operational dependency risk.`,
+        suggestedAction:
+          'Add alternative suppliers, negotiate better terms, or reduce dependency on this supplier.',
         affectedMetric: 'largestSupplierSharePercent',
       },
     ];

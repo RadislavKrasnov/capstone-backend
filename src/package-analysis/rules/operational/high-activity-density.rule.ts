@@ -9,7 +9,7 @@ import { RecommendationRule } from '../recommendation-rule.interface';
 @Injectable()
 export class HighActivityDensityRule implements RecommendationRule {
   readonly code = 'HIGH_ACTIVITY_DENSITY';
-  readonly category = RecommendationCategory.OPERATIONAL;
+  readonly category = RecommendationCategory.ITINERARY;
 
   evaluate(context: AnalysisContext): RecommendationDraft[] {
     const itineraryMetrics = context.itineraryMetrics ?? [];

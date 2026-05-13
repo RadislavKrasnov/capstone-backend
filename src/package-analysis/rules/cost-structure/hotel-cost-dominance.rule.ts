@@ -14,10 +14,11 @@ export class HotelCostDominanceRule implements RecommendationRule {
 
   evaluate(context: AnalysisContext): RecommendationDraft[] {
     const hotelShare =
-      context.financialMetrics?.categoryCostBreakdown.find((item) => item.category === CostCategory.HOTEL)
-        ?.sharePercent ?? 0;
+      context.financialMetrics?.categoryCostBreakdown.find(
+        (item) => item.category === CostCategory.HOTEL,
+      )?.sharePercent ?? 0;
 
-    if (hotelShare <= 55) {
+    if (hotelShare <= 45) {
       return [];
     }
 
@@ -25,10 +26,11 @@ export class HotelCostDominanceRule implements RecommendationRule {
       {
         ruleCode: this.code,
         category: this.category,
-        severity: RecommendationSeverity.MEDIUM,
+        severity: hotelShare > 60 ? RecommendationSeverity.HIGH : RecommendationSeverity.MEDIUM,
         title: 'Hotel costs dominate the package structure',
-        explanation: `Hotel costs represent ${hotelShare.toFixed(2)}% of total required costs.`,
-        suggestedAction: 'Review hotel category, negotiate rates, or offer alternative accommodation tiers.',
+        explanation: `Hotel costs represent ${hotelShare.toFixed(2)}% of total package cost, which strongly affects profitability.`,
+        suggestedAction:
+          'Review hotel supplier pricing, adjust accommodation category, or negotiate group rates.',
         affectedMetric: 'hotelCostSharePercent',
       },
     ];

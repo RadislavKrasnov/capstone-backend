@@ -46,6 +46,10 @@ import { RecommendationEngineService } from './services/recommendation-engine.se
 import { HighFixedCostExposureRule } from './rules/financial/high-fixed-cost-exposure.rule';
 import { VeryLowMarginRule } from './rules/financial/very-low-margin.rule';
 import { HighActivityDensityRule } from './rules/operational/high-activity-density.rule';
+import { HighTransferShareRule } from './rules/operational/high-transfer-share.rule';
+import { IncompleteTimeDataRule } from './rules/validation/incomplete-time-data.rule';
+import { MissingCostDataRule } from './rules/validation/missing-cost-data.rule';
+import { MissingItineraryDataRule } from './rules/validation/missing-itinerary-data.rule';
 
 @Module({
   imports: [
@@ -66,37 +70,48 @@ import { HighActivityDensityRule } from './rules/operational/high-activity-densi
   controllers: [PackageAnalysisController, PackageAnalysisRunsController],
   providers: [
     PackageAnalysisService,
-    AnalysisInputLoaderService,
+
     AnalysisConfigurationResolverService,
+    AnalysisInputLoaderService,
     AnalysisResultPersisterService,
     FinancialAnalysisService,
     ItineraryFatigueAnalysisService,
     PackageQualityScoreService,
     RecommendationEngineService,
+
+    MissingCostDataRule,
+    MissingItineraryDataRule,
+    IncompleteTimeDataRule,
+
     NegativeProfitRule,
     LowMarginRule,
+    VeryLowMarginRule,
     BreakEvenRiskRule,
     NonPositiveContributionRule,
     WeakSafetyBufferRule,
+    HighFixedCostExposureRule,
+
     OverloadedDayRule,
     CriticalFatigueDayRule,
     InsufficientRestTimeRule,
     UnderfilledDayRule,
     ConsecutiveHighFatigueDaysRule,
+
     ExcessiveTransferTimeRule,
+    HighTransferShareRule,
     ShortBuffersRule,
     LongDayDurationRule,
     NoMealBreakRule,
     LateFinishEarlyStartRule,
+    HighActivityDensityRule,
+
     SupplierDependencyRiskRule,
     HotelCostDominanceRule,
     TransportCostDominanceRule,
     HighOtherCostShareRule,
+
     LowQualityScoreRule,
     WeakSubScoreRule,
-    VeryLowMarginRule,
-    HighFixedCostExposureRule,
-    HighActivityDensityRule,
   ],
   exports: [PackageAnalysisService],
 })

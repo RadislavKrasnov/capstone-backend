@@ -13,7 +13,9 @@ export class LateFinishEarlyStartRule implements RecommendationRule {
 
   evaluate(context: AnalysisContext): RecommendationDraft[] {
     const recommendations: RecommendationDraft[] = [];
-    const itineraryMetrics = [...(context.itineraryMetrics ?? [])].sort((a, b) => a.dayNumber - b.dayNumber);
+    const itineraryMetrics = [...(context.itineraryMetrics ?? [])].sort(
+      (a, b) => a.dayNumber - b.dayNumber,
+    );
 
     for (let index = 1; index < itineraryMetrics.length; index += 1) {
       const previous = itineraryMetrics[index - 1];
@@ -23,11 +25,12 @@ export class LateFinishEarlyStartRule implements RecommendationRule {
         recommendations.push({
           ruleCode: this.code,
           category: this.category,
-          severity: RecommendationSeverity.MEDIUM,
+          severity: RecommendationSeverity.HIGH,
           title: `Late finish before early start between days ${previous.dayNumber} and ${current.dayNumber}`,
-          explanation: 'A late finish followed by an early start reduces recovery time and increases operational risk.',
-          suggestedAction: 'Move the next morning activity later or shorten the previous evening plan.',
-          affectedMetric: 'dailyScheduleTiming',
+          explanation:
+            'A late finish followed by an early start leaves limited recovery time and increases cumulative fatigue risk.',
+          suggestedAction: 'Start the next day later or move the evening activity to another day.',
+          affectedMetric: 'recoveryTimeBetweenDays',
           affectedDayId: current.dayId,
         });
       }

@@ -9,15 +9,16 @@ import { RecommendationRule } from '../recommendation-rule.interface';
 
 @Injectable()
 export class HighOtherCostShareRule implements RecommendationRule {
-  readonly code = 'HIGH_OTHER_COST_SHARE';
+  readonly code = 'OTHER_COST_TOO_HIGH';
   readonly category = RecommendationCategory.COST_STRUCTURE;
 
   evaluate(context: AnalysisContext): RecommendationDraft[] {
     const otherShare =
-      context.financialMetrics?.categoryCostBreakdown.find((item) => item.category === CostCategory.OTHER)
-        ?.sharePercent ?? 0;
+      context.financialMetrics?.categoryCostBreakdown.find(
+        (item) => item.category === CostCategory.OTHER,
+      )?.sharePercent ?? 0;
 
-    if (otherShare <= 20) {
+    if (otherShare <= 25) {
       return [];
     }
 
@@ -25,10 +26,11 @@ export class HighOtherCostShareRule implements RecommendationRule {
       {
         ruleCode: this.code,
         category: this.category,
-        severity: RecommendationSeverity.LOW,
+        severity: RecommendationSeverity.MEDIUM,
         title: 'Too many costs are classified as OTHER',
-        explanation: `OTHER costs represent ${otherShare.toFixed(2)}% of total required costs, reducing analytical clarity.`,
-        suggestedAction: 'Reclassify these costs into more specific categories where possible.',
+        explanation: `OTHER costs represent ${otherShare.toFixed(2)}% of total required costs, reducing cost transparency and making optimization harder.`,
+        suggestedAction:
+          'Reclassify costs into specific categories such as HOTEL, TRANSPORT, MEAL, ACTIVITY, GUIDE, FLIGHT, or INSURANCE.',
         affectedMetric: 'otherCostSharePercent',
       },
     ];
