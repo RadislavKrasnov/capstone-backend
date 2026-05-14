@@ -29,7 +29,10 @@ export class AnalysisResultPersisterService {
     recommendationDrafts: RecommendationDraft[],
   ): Promise<PersistedAnalysisResults> {
     const financialMetrics = this.requireValue(context.financialMetrics, 'Financial metrics');
-    const dailyFatigueMetrics = this.requireValue(context.dailyFatigueResults, 'Daily fatigue results');
+    const dailyFatigueMetrics = this.requireValue(
+      context.dailyFatigueResults,
+      'Daily fatigue results',
+    );
     const qualityScore = this.requireValue(context.qualityScore, 'Quality score');
 
     const financialResult = await manager.save(
@@ -101,7 +104,10 @@ export class AnalysisResultPersisterService {
       analysisStatus: AnalysisStatus.COMPLETED,
     });
 
-    if (context.package.status === PackageStatus.DRAFT || context.package.status === PackageStatus.ANALYZED) {
+    if (
+      context.package.status === PackageStatus.DRAFT ||
+      context.package.status === PackageStatus.ANALYZED
+    ) {
       await manager.update(TourPackage, context.package.id, { status: PackageStatus.ANALYZED });
     }
 

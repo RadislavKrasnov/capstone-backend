@@ -5,6 +5,7 @@ import { RecommendationSeverity } from '../../../common/enums/recommendation-sev
 import { AnalysisContext } from '../../types/analysis-context.type';
 import { RecommendationDraft } from '../../types/recommendation-draft.type';
 import { RecommendationRule } from '../recommendation-rule.interface';
+import { RECOMMENDATION_RULE_THRESHOLDS } from '../../constants/analysis-thresholds.constants';
 
 @Injectable()
 export class WeakSafetyBufferRule implements RecommendationRule {
@@ -19,7 +20,8 @@ export class WeakSafetyBufferRule implements RecommendationRule {
       !financial ||
       financial.contributionPerPerson <= 0 ||
       expectedGroupSize < financial.breakEvenGroupSizeRounded ||
-      financial.breakEvenSafetyTravelers > 2
+      financial.breakEvenSafetyTravelers >
+        RECOMMENDATION_RULE_THRESHOLDS.WEAK_BREAK_EVEN_SAFETY_TRAVELERS
     ) {
       return [];
     }

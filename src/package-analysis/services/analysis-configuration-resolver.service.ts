@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
 
 import { AnalysisConfiguration } from '../entities/analysis-configuration.entity';
+import { ANALYSIS_DEFAULT_CONFIGURATION } from '../constants/analysis-thresholds.constants';
 
 @Injectable()
 export class AnalysisConfigurationResolverService {
@@ -33,11 +34,11 @@ export class AnalysisConfigurationResolverService {
     return this.analysisConfigurationsRepository.create({
       agencyId: null,
       name: 'Default configuration',
-      minTargetMarginPercent: '15.00',
-      goodMarginPercent: '25.00',
-      maxDailyFatigueScore: 65,
-      maxTransferMinutesPerDay: 180,
-      minBufferMinutes: 30,
+      minTargetMarginPercent: ANALYSIS_DEFAULT_CONFIGURATION.MIN_TARGET_MARGIN_PERCENT,
+      goodMarginPercent: ANALYSIS_DEFAULT_CONFIGURATION.GOOD_MARGIN_PERCENT,
+      maxDailyFatigueScore: ANALYSIS_DEFAULT_CONFIGURATION.MAX_DAILY_FATIGUE_SCORE,
+      maxTransferMinutesPerDay: ANALYSIS_DEFAULT_CONFIGURATION.MAX_TRANSFER_MINUTES_PER_DAY,
+      minBufferMinutes: ANALYSIS_DEFAULT_CONFIGURATION.MIN_BUFFER_MINUTES,
       isDefault: true,
     });
   }

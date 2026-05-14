@@ -6,6 +6,7 @@ import { RecommendationSeverity } from '../../../common/enums/recommendation-sev
 import { AnalysisContext } from '../../types/analysis-context.type';
 import { RecommendationDraft } from '../../types/recommendation-draft.type';
 import { RecommendationRule } from '../recommendation-rule.interface';
+import { COST_STRUCTURE_RULE_THRESHOLDS } from '../../constants/analysis-thresholds.constants';
 
 @Injectable()
 export class HighOtherCostShareRule implements RecommendationRule {
@@ -18,7 +19,7 @@ export class HighOtherCostShareRule implements RecommendationRule {
         (item) => item.category === CostCategory.OTHER,
       )?.sharePercent ?? 0;
 
-    if (otherShare <= 25) {
+    if (otherShare <= COST_STRUCTURE_RULE_THRESHOLDS.MAX_OTHER_COST_SHARE_PERCENT) {
       return [];
     }
 

@@ -5,6 +5,10 @@ import { RecommendationSeverity } from '../../../common/enums/recommendation-sev
 import { AnalysisContext } from '../../types/analysis-context.type';
 import { RecommendationDraft } from '../../types/recommendation-draft.type';
 import { RecommendationRule } from '../recommendation-rule.interface';
+import {
+  NUMERIC_FORMAT,
+  RECOMMENDATION_RULE_THRESHOLDS,
+} from '../../constants/analysis-thresholds.constants';
 
 @Injectable()
 export class HighFixedCostExposureRule implements RecommendationRule {
@@ -20,7 +24,11 @@ export class HighFixedCostExposureRule implements RecommendationRule {
 
     const fixedCostShare = financial.fixedCostTotal / financial.totalCost;
 
-    if (fixedCostShare <= 0.5 || financial.breakEvenUtilizationPercent < 80) {
+    if (
+      fixedCostShare <= RECOMMENDATION_RULE_THRESHOLDS.HIGH_FIXED_COST_SHARE ||
+      financial.breakEvenUtilizationPercent <
+        RECOMMENDATION_RULE_THRESHOLDS.MEDIUM_BREAK_EVEN_UTILIZATION_PERCENT
+    ) {
       return [];
     }
 
@@ -29,11 +37,12 @@ export class HighFixedCostExposureRule implements RecommendationRule {
         ruleCode: this.code,
         category: this.category,
         severity:
-          financial.breakEvenUtilizationPercent >= 90
+          financial.breakEvenUtilizationPercent >=
+          RECOMMENDATION_RULE_THRESHOLDS.HIGH_BREAK_EVEN_UTILIZATION_PERCENT
             ? RecommendationSeverity.HIGH
             : RecommendationSeverity.MEDIUM,
         title: 'Package has high fixed-cost exposure',
-        explanation: `Fixed costs represent ${(fixedCostShare * 100).toFixed(2)}% of total required costs, and break-even utilization is ${financial.breakEvenUtilizationPercent.toFixed(2)}%. This makes the package sensitive to low group size.`,
+        explanation: `Fixed costs represent ${(fixedCostShare * NUMERIC_FORMAT.PERCENT_MULTIPLIER).toFixed(2)}% of total required costs, and break-even utilization is ${financial.breakEvenUtilizationPercent.toFixed(2)}%. This makes the package sensitive to low group size.`,
         suggestedAction:
           'Reduce fixed commitments, negotiate group-based pricing, or set a minimum participant count.',
         affectedMetric: 'fixedCostTotal',

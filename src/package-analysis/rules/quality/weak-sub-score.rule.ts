@@ -5,6 +5,7 @@ import { RecommendationSeverity } from '../../../common/enums/recommendation-sev
 import { AnalysisContext } from '../../types/analysis-context.type';
 import { RecommendationDraft } from '../../types/recommendation-draft.type';
 import { RecommendationRule } from '../recommendation-rule.interface';
+import { QUALITY_SCORE_THRESHOLDS } from '../../constants/analysis-thresholds.constants';
 
 @Injectable()
 export class WeakSubScoreRule implements RecommendationRule {
@@ -53,14 +54,17 @@ export class WeakSubScoreRule implements RecommendationRule {
         suggestedAction:
           'Review dominant cost categories, supplier concentration, and fixed cost exposure.',
       },
-    ].filter((item) => item.score < 60);
+    ].filter((item) => item.score < QUALITY_SCORE_THRESHOLDS.WEAK_SUB_SCORE);
 
     return weakScores.map((item) => ({
       ruleCode: item.ruleCode,
       category: item.category,
-      severity: item.score < 40 ? RecommendationSeverity.HIGH : RecommendationSeverity.MEDIUM,
+      severity:
+        item.score < QUALITY_SCORE_THRESHOLDS.HIGH_SEVERITY_SUB_SCORE
+          ? RecommendationSeverity.HIGH
+          : RecommendationSeverity.MEDIUM,
       title: `Weak ${item.label} score`,
-      explanation: `The ${item.label} score is ${item.score}/100, which weakens the overall package quality.`,
+      explanation: `The ${item.label} score is ${item.score}/${QUALITY_SCORE_THRESHOLDS.MAX_SCORE}, which weakens the overall package quality.`,
       suggestedAction: item.suggestedAction,
       affectedMetric: item.metric,
     }));

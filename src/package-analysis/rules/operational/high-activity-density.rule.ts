@@ -5,6 +5,7 @@ import { RecommendationSeverity } from '../../../common/enums/recommendation-sev
 import { AnalysisContext } from '../../types/analysis-context.type';
 import { RecommendationDraft } from '../../types/recommendation-draft.type';
 import { RecommendationRule } from '../recommendation-rule.interface';
+import { ITINERARY_RULE_THRESHOLDS } from '../../constants/analysis-thresholds.constants';
 
 @Injectable()
 export class HighActivityDensityRule implements RecommendationRule {
@@ -15,7 +16,7 @@ export class HighActivityDensityRule implements RecommendationRule {
     const itineraryMetrics = context.itineraryMetrics ?? [];
 
     return itineraryMetrics
-      .filter((metric) => metric.activityDensity > 0.65)
+      .filter((metric) => metric.activityDensity > ITINERARY_RULE_THRESHOLDS.HIGH_ACTIVITY_DENSITY)
       .map((metric) => ({
         ruleCode: this.code,
         category: this.category,

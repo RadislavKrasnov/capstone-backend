@@ -5,6 +5,7 @@ import { RecommendationSeverity } from '../../../common/enums/recommendation-sev
 import { AnalysisContext } from '../../types/analysis-context.type';
 import { RecommendationDraft } from '../../types/recommendation-draft.type';
 import { RecommendationRule } from '../recommendation-rule.interface';
+import { QUALITY_SCORE_THRESHOLDS } from '../../constants/analysis-thresholds.constants';
 
 @Injectable()
 export class OverloadedDayRule implements RecommendationRule {
@@ -21,7 +22,7 @@ export class OverloadedDayRule implements RecommendationRule {
         category: this.category,
         severity: RecommendationSeverity.HIGH,
         title: `Day ${result.dayNumber} is overloaded`,
-        explanation: `Fatigue score is ${result.fatigueScore}/100, above the configured limit of ${context.configuration.maxDailyFatigueScore}.`,
+        explanation: `Fatigue score is ${result.fatigueScore}/${QUALITY_SCORE_THRESHOLDS.MAX_SCORE}, above the configured limit of ${context.configuration.maxDailyFatigueScore}.`,
         suggestedAction:
           'Move one activity to another day, reduce transfer time, or add more free time.',
         affectedMetric: 'fatigueScore',

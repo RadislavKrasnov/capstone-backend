@@ -6,6 +6,7 @@ import { RecommendationSeverity } from '../../../common/enums/recommendation-sev
 import { AnalysisContext } from '../../types/analysis-context.type';
 import { RecommendationDraft } from '../../types/recommendation-draft.type';
 import { RecommendationRule } from '../recommendation-rule.interface';
+import { COST_STRUCTURE_RULE_THRESHOLDS } from '../../constants/analysis-thresholds.constants';
 
 @Injectable()
 export class TransportCostDominanceRule implements RecommendationRule {
@@ -17,7 +18,7 @@ export class TransportCostDominanceRule implements RecommendationRule {
       context.financialMetrics?.categoryCostBreakdown.find((item) => item.category === CostCategory.TRANSPORT)
         ?.sharePercent ?? 0;
 
-    if (transportShare <= 45) {
+    if (transportShare <= COST_STRUCTURE_RULE_THRESHOLDS.MAX_TRANSPORT_COST_SHARE_PERCENT) {
       return [];
     }
 

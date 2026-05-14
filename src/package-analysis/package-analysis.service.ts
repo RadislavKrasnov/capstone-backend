@@ -5,6 +5,10 @@ import { DataSource, Repository } from 'typeorm';
 import { AnalysisStatus } from '../common/enums/analysis-status.enum';
 import { RecommendationCategory } from '../common/enums/recommendation-category.enum';
 import { RecommendationSeverity } from '../common/enums/recommendation-severity.enum';
+import {
+  DASHBOARD_RESPONSE_LIMITS,
+  NUMERIC_FORMAT,
+} from './constants/analysis-thresholds.constants';
 import { DailyFatigueResult } from './entities/daily-fatigue-result.entity';
 import { FinancialAnalysisResult } from './entities/financial-analysis-result.entity';
 import { GeneratedRecommendation } from './entities/generated-recommendation.entity';
@@ -231,9 +235,9 @@ export class PackageAnalysisService {
 
     const minTargetMarginPercent = input.context
       ? this.toNumber(input.context.configuration.minTargetMarginPercent)
-      : 15;
+      : DASHBOARD_RESPONSE_LIMITS.DEFAULT_MIN_TARGET_MARGIN_PERCENT;
 
-    const targetMarginRatio = minTargetMarginPercent / 100;
+    const targetMarginRatio = minTargetMarginPercent / NUMERIC_FORMAT.PERCENT_MULTIPLIER;
 
     const fallbackBreakEvenGroupSizeRounded =
       financial.contributionPerPerson > 0 ? Math.ceil(financial.breakEvenGroupSize) : 0;
@@ -245,8 +249,9 @@ export class PackageAnalysisService {
 
     const fallbackBreakEvenUtilizationPercent =
       expectedGroupSize > 0 && financial.contributionPerPerson > 0
-        ? (fallbackBreakEvenGroupSizeRounded / expectedGroupSize) * 100
-        : 100;
+        ? (fallbackBreakEvenGroupSizeRounded / expectedGroupSize) *
+          NUMERIC_FORMAT.PERCENT_MULTIPLIER
+        : NUMERIC_FORMAT.PERCENT_MULTIPLIER;
 
     const fallbackRequiredPriceForTargetMargin =
       expectedGroupSize > 0 && targetMarginRatio < 1
@@ -264,7 +269,9 @@ export class PackageAnalysisService {
       expectedGroupSize > 0 ? financial.totalCost / expectedGroupSize : 0;
     const fallbackProfitPerPerson = sellingPricePerPerson - fallbackCostPerPerson;
     const fallbackMarkupPercent =
-      financial.totalCost > 0 ? (financial.grossProfit / financial.totalCost) * 100 : 0;
+      financial.totalCost > 0
+        ? (financial.grossProfit / financial.totalCost) * NUMERIC_FORMAT.PERCENT_MULTIPLIER
+        : 0;
 
     const recommendationDtos = input.recommendations.map((recommendation) =>
       this.buildRecommendationDto(recommendation),
@@ -359,7 +366,10 @@ export class PackageAnalysisService {
             (recommendation) => recommendation.severity === RecommendationSeverity.LOW,
           ).length,
         },
-        topRecommendations: recommendationDtos.slice(0, 8),
+        topRecommendations: recommendationDtos.slice(
+          0,
+          DASHBOARD_RESPONSE_LIMITS.TOP_RECOMMENDATIONS_COUNT,
+        ),
         groups: {
           financial: recommendationDtos.filter(
             (recommendation) => recommendation.category === RecommendationCategory.FINANCIAL,
@@ -406,11 +416,19 @@ export class PackageAnalysisService {
       return 'CRITICAL';
     }
 
-    if (grossMarginPercent < minTargetMarginPercent / 2 || breakEvenUtilizationPercent > 100) {
+    if (
+      grossMarginPercent < minTargetMarginPercent / 2 ||
+      breakEvenUtilizationPercent >
+        DASHBOARD_RESPONSE_LIMITS.HIGH_FINANCIAL_RISK_UTILIZATION_PERCENT
+    ) {
       return 'HIGH';
     }
 
-    if (grossMarginPercent < minTargetMarginPercent || breakEvenUtilizationPercent > 80) {
+    if (
+      grossMarginPercent < minTargetMarginPercent ||
+      breakEvenUtilizationPercent >
+        DASHBOARD_RESPONSE_LIMITS.MEDIUM_FINANCIAL_RISK_UTILIZATION_PERCENT
+    ) {
       return 'MEDIUM';
     }
 
@@ -418,19 +436,19 @@ export class PackageAnalysisService {
   }
 
   private resolveQualityLevel(score: number): QualityLevel {
-    if (score >= 85) {
+    if (score >= DASHBOARD_RESPONSE_LIMITS.QUALITY_EXCELLENT_SCORE) {
       return 'EXCELLENT';
     }
 
-    if (score >= 70) {
+    if (score >= DASHBOARD_RESPONSE_LIMITS.QUALITY_GOOD_SCORE) {
       return 'GOOD';
     }
 
-    if (score >= 55) {
+    if (score >= DASHBOARD_RESPONSE_LIMITS.QUALITY_RISKY_SCORE) {
       return 'RISKY';
     }
 
-    if (score >= 40) {
+    if (score >= DASHBOARD_RESPONSE_LIMITS.QUALITY_POOR_SCORE) {
       return 'POOR';
     }
 
@@ -470,7 +488,9 @@ export class PackageAnalysisService {
   }
 
   private round(value: number): number {
-    return Math.round(value * 100) / 100;
+    return (
+      Math.round(value * NUMERIC_FORMAT.PERCENT_MULTIPLIER) / NUMERIC_FORMAT.PERCENT_MULTIPLIER
+    );
   }
 
   private buildItineraryDailyResults(

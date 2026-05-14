@@ -4,6 +4,10 @@ import { CostCategory } from '../../common/enums/cost-category.enum';
 import { CostType } from '../../common/enums/cost-type.enum';
 import { CostItem } from '../../costs/entities/cost-item.entity';
 import { AnalysisContext } from '../types/analysis-context.type';
+import {
+  FINANCIAL_ANALYSIS_THRESHOLDS,
+  NUMERIC_FORMAT,
+} from '../constants/analysis-thresholds.constants';
 import { FinancialRiskLevel } from '../types/analysis-dashboard-response.type';
 import {
   CategoryCostShare,
@@ -51,7 +55,8 @@ export class FinancialAnalysisService {
     const contributionPerPerson = sellingPricePerPerson - variableCostPerPerson;
 
     const grossProfit = totalRevenue - totalCost;
-    const grossMarginPercent = totalRevenue > 0 ? (grossProfit / totalRevenue) * 100 : 0;
+    const grossMarginPercent =
+      totalRevenue > 0 ? (grossProfit / totalRevenue) * NUMERIC_FORMAT.PERCENT_MULTIPLIER : 0;
     const profitPerPerson = sellingPricePerPerson - costPerPerson;
 
     const breakEvenGroupSize =
@@ -62,10 +67,12 @@ export class FinancialAnalysisService {
       contributionPerPerson > 0 ? groupSize - breakEvenGroupSizeRounded : 0;
 
     const breakEvenUtilizationPercent =
-      contributionPerPerson > 0 ? (breakEvenGroupSizeRounded / groupSize) * 100 : 100;
+      contributionPerPerson > 0
+        ? (breakEvenGroupSizeRounded / groupSize) * NUMERIC_FORMAT.PERCENT_MULTIPLIER
+        : NUMERIC_FORMAT.PERCENT_MULTIPLIER;
 
     const minTargetMarginPercent = this.toNumber(context.configuration.minTargetMarginPercent);
-    const targetMarginRatio = minTargetMarginPercent / 100;
+    const targetMarginRatio = minTargetMarginPercent / NUMERIC_FORMAT.PERCENT_MULTIPLIER;
 
     const requiredPriceForTargetMargin =
       targetMarginRatio < 1 ? totalCost / (groupSize * (1 - targetMarginRatio)) : 0;
@@ -75,7 +82,8 @@ export class FinancialAnalysisService {
     const maxCostForTargetMargin = totalRevenue * (1 - targetMarginRatio);
     const requiredCostReductionForTargetMargin = Math.max(0, totalCost - maxCostForTargetMargin);
 
-    const markupPercent = totalCost > 0 ? (grossProfit / totalCost) * 100 : 0;
+    const markupPercent =
+      totalCost > 0 ? (grossProfit / totalCost) * NUMERIC_FORMAT.PERCENT_MULTIPLIER : 0;
 
     const financialRiskLevel = this.resolveFinancialRiskLevel(
       grossProfit,
@@ -213,7 +221,10 @@ export class FinancialAnalysisService {
       .map(([category, cost]) => ({
         category,
         totalCost: this.roundMoney(cost),
-        sharePercent: totalCost > 0 ? this.roundPercent((cost / totalCost) * 100) : 0,
+        sharePercent:
+          totalCost > 0
+            ? this.roundPercent((cost / totalCost) * NUMERIC_FORMAT.PERCENT_MULTIPLIER)
+            : 0,
       }))
       .sort((a, b) => b.totalCost - a.totalCost);
   }
@@ -238,7 +249,10 @@ export class FinancialAnalysisService {
         supplierId,
         supplierName: value.supplierName,
         totalCost: this.roundMoney(value.totalCost),
-        sharePercent: totalCost > 0 ? this.roundPercent((value.totalCost / totalCost) * 100) : 0,
+        sharePercent:
+          totalCost > 0
+            ? this.roundPercent((value.totalCost / totalCost) * NUMERIC_FORMAT.PERCENT_MULTIPLIER)
+            : 0,
       }))
       .sort((a, b) => b.totalCost - a.totalCost);
   }
@@ -260,11 +274,19 @@ export class FinancialAnalysisService {
       return 'CRITICAL';
     }
 
-    if (grossMarginPercent < 10 || breakEvenUtilizationPercent >= 90) {
+    if (
+      grossMarginPercent < FINANCIAL_ANALYSIS_THRESHOLDS.VERY_LOW_MARGIN_PERCENT ||
+      breakEvenUtilizationPercent >=
+        FINANCIAL_ANALYSIS_THRESHOLDS.HIGH_BREAK_EVEN_UTILIZATION_PERCENT
+    ) {
       return 'HIGH';
     }
 
-    if (grossMarginPercent < minTargetMarginPercent || breakEvenUtilizationPercent >= 80) {
+    if (
+      grossMarginPercent < minTargetMarginPercent ||
+      breakEvenUtilizationPercent >=
+        FINANCIAL_ANALYSIS_THRESHOLDS.MEDIUM_BREAK_EVEN_UTILIZATION_PERCENT
+    ) {
       return 'MEDIUM';
     }
 
@@ -281,19 +303,19 @@ export class FinancialAnalysisService {
   }
 
   private roundMoney(value: number): number {
-    return this.round(value, 2);
+    return this.round(value, NUMERIC_FORMAT.MONEY_DECIMAL_PLACES);
   }
 
   private roundPercent(value: number): number {
-    return this.round(value, 2);
+    return this.round(value, NUMERIC_FORMAT.PERCENT_DECIMAL_PLACES);
   }
 
   private roundNumber(value: number): number {
-    return this.round(value, 2);
+    return this.round(value, NUMERIC_FORMAT.NUMBER_DECIMAL_PLACES);
   }
 
   private round(value: number, digits: number): number {
-    const multiplier = 10 ** digits;
+    const multiplier = NUMERIC_FORMAT.ROUNDING_MULTIPLIER_BASE ** digits;
     return Math.round(value * multiplier) / multiplier;
   }
 }

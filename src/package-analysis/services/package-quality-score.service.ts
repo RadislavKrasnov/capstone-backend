@@ -3,6 +3,13 @@ import { Injectable } from '@nestjs/common';
 import { CostCategory } from '../../common/enums/cost-category.enum';
 import { FatigueLevel } from '../../common/enums/fatigue-level.enum';
 import { AnalysisContext } from '../types/analysis-context.type';
+import {
+  FINANCIAL_ANALYSIS_THRESHOLDS,
+  ITINERARY_RULE_THRESHOLDS,
+  NUMERIC_FORMAT,
+  QUALITY_SCORE_THRESHOLDS,
+  QUALITY_SCORE_WEIGHTS,
+} from '../constants/analysis-thresholds.constants';
 import { CostStructureMetrics, QualityScore } from '../types/quality-score.type';
 
 @Injectable()
@@ -22,7 +29,9 @@ export class PackageQualityScoreService {
     return {
       fixedCostSharePercent:
         financial.totalCost > 0
-          ? this.round((financial.fixedCostTotal / financial.totalCost) * 100)
+          ? this.round(
+              (financial.fixedCostTotal / financial.totalCost) * NUMERIC_FORMAT.PERCENT_MULTIPLIER,
+            )
           : 0,
       largestSupplierSharePercent: financial.supplierCostBreakdown[0]?.sharePercent ?? 0,
       largestCostCategorySharePercent: financial.categoryCostBreakdown[0]?.sharePercent ?? 0,
@@ -67,31 +76,31 @@ export class PackageQualityScoreService {
     const costStructureScore = this.calculateCostStructureScore(context, costStructureMetrics);
 
     let overallScore = Math.round(
-      profitabilityScore * 0.35 +
-        itineraryBalanceScore * 0.3 +
-        operationalFeasibilityScore * 0.2 +
-        costStructureScore * 0.15,
+      profitabilityScore * QUALITY_SCORE_WEIGHTS.PROFITABILITY +
+        itineraryBalanceScore * QUALITY_SCORE_WEIGHTS.ITINERARY_BALANCE +
+        operationalFeasibilityScore * QUALITY_SCORE_WEIGHTS.OPERATIONAL_FEASIBILITY +
+        costStructureScore * QUALITY_SCORE_WEIGHTS.COST_STRUCTURE,
     );
 
     const appliedCaps: QualityScore['appliedCaps'] = [];
 
     if (financial.grossProfit < 0) {
-      overallScore = Math.min(overallScore, 45);
+      overallScore = Math.min(overallScore, QUALITY_SCORE_THRESHOLDS.NEGATIVE_PROFIT_CAP);
       appliedCaps.push({
         code: 'NEGATIVE_PROFIT_CAP',
         description:
           'Gross profit is negative, so the package cannot receive a healthy quality score.',
-        cappedAt: 45,
+        cappedAt: QUALITY_SCORE_THRESHOLDS.NEGATIVE_PROFIT_CAP,
       });
     }
 
     if (financial.contributionPerPerson <= 0) {
-      overallScore = Math.min(overallScore, 35);
+      overallScore = Math.min(overallScore, QUALITY_SCORE_THRESHOLDS.NON_POSITIVE_CONTRIBUTION_CAP);
       appliedCaps.push({
         code: 'NON_POSITIVE_CONTRIBUTION_CAP',
         description:
           'Contribution per person is not positive, so each additional traveler does not improve profitability.',
-        cappedAt: 35,
+        cappedAt: QUALITY_SCORE_THRESHOLDS.NON_POSITIVE_CONTRIBUTION_CAP,
       });
     }
 
@@ -99,44 +108,56 @@ export class PackageQualityScoreService {
       (result) => result.fatigueLevel === FatigueLevel.CRITICAL,
     ).length;
 
-    if (criticalFatigueDayCount >= 2) {
-      overallScore = Math.min(overallScore, 65);
+    if (criticalFatigueDayCount >= QUALITY_SCORE_THRESHOLDS.MULTIPLE_CRITICAL_FATIGUE_DAYS_COUNT) {
+      overallScore = Math.min(
+        overallScore,
+        QUALITY_SCORE_THRESHOLDS.MULTIPLE_CRITICAL_FATIGUE_DAYS_CAP,
+      );
       appliedCaps.push({
         code: 'MULTIPLE_CRITICAL_FATIGUE_DAYS_CAP',
         description: 'Multiple itinerary days have critical fatigue.',
-        cappedAt: 65,
+        cappedAt: QUALITY_SCORE_THRESHOLDS.MULTIPLE_CRITICAL_FATIGUE_DAYS_CAP,
       });
-    } else if (criticalFatigueDayCount >= 1) {
-      overallScore = Math.min(overallScore, 75);
+    } else if (
+      criticalFatigueDayCount >= QUALITY_SCORE_THRESHOLDS.SINGLE_CRITICAL_FATIGUE_DAY_COUNT
+    ) {
+      overallScore = Math.min(
+        overallScore,
+        QUALITY_SCORE_THRESHOLDS.SINGLE_CRITICAL_FATIGUE_DAY_CAP,
+      );
       appliedCaps.push({
         code: 'CRITICAL_FATIGUE_DAY_CAP',
         description: 'At least one itinerary day has critical fatigue.',
-        cappedAt: 75,
+        cappedAt: QUALITY_SCORE_THRESHOLDS.SINGLE_CRITICAL_FATIGUE_DAY_CAP,
       });
     }
 
     if (costStructureMetrics.requiredCostItemsCount === 0) {
-      overallScore = Math.min(overallScore, 50);
+      overallScore = Math.min(overallScore, QUALITY_SCORE_THRESHOLDS.MISSING_REQUIRED_COSTS_CAP);
       appliedCaps.push({
         code: 'NO_REQUIRED_COSTS_CAP',
         description:
           'No required cost items are available, so cost and profitability quality cannot be trusted.',
-        cappedAt: 50,
+        cappedAt: QUALITY_SCORE_THRESHOLDS.MISSING_REQUIRED_COSTS_CAP,
       });
     }
 
     if (context.days.length === 0 || context.itineraryItems.length === 0) {
-      overallScore = Math.min(overallScore, 50);
+      overallScore = Math.min(overallScore, QUALITY_SCORE_THRESHOLDS.MISSING_ITINERARY_DATA_CAP);
       appliedCaps.push({
         code: 'NO_ITINERARY_DATA_CAP',
         description:
           'No itinerary data is available, so customer experience quality cannot be fully evaluated.',
-        cappedAt: 50,
+        cappedAt: QUALITY_SCORE_THRESHOLDS.MISSING_ITINERARY_DATA_CAP,
       });
     }
 
     return {
-      overallScore: this.clamp(overallScore, 0, 100),
+      overallScore: this.clamp(
+        overallScore,
+        QUALITY_SCORE_THRESHOLDS.MIN_SCORE,
+        QUALITY_SCORE_THRESHOLDS.MAX_SCORE,
+      ),
       profitabilityScore,
       itineraryBalanceScore,
       operationalFeasibilityScore,
@@ -156,48 +177,50 @@ export class PackageQualityScoreService {
     breakEvenGroupSizeRounded: number;
   }): number {
     if (input.contributionPerPerson <= 0) {
-      return 0;
+      return QUALITY_SCORE_THRESHOLDS.MIN_SCORE;
     }
 
     if (input.grossProfit < 0) {
-      return 0;
+      return QUALITY_SCORE_THRESHOLDS.MIN_SCORE;
     }
 
     if (input.expectedGroupSize < input.breakEvenGroupSizeRounded) {
-      return 20;
+      return QUALITY_SCORE_THRESHOLDS.BREAK_EVEN_RISK_SCORE;
     }
 
     if (
       input.grossMarginPercent >= input.goodMarginPercent &&
-      input.breakEvenUtilizationPercent < 60
+      input.breakEvenUtilizationPercent <
+        QUALITY_SCORE_THRESHOLDS.LOW_BREAK_EVEN_UTILIZATION_PERCENT
     ) {
-      return 100;
+      return QUALITY_SCORE_THRESHOLDS.EXCELLENT_PROFITABILITY_SCORE;
     }
 
     if (input.grossMarginPercent >= input.goodMarginPercent) {
-      return 90;
+      return QUALITY_SCORE_THRESHOLDS.GOOD_PROFITABILITY_SCORE;
     }
 
     if (
       input.grossMarginPercent >= input.minTargetMarginPercent &&
-      input.breakEvenUtilizationPercent < 80
+      input.breakEvenUtilizationPercent <
+        QUALITY_SCORE_THRESHOLDS.MEDIUM_BREAK_EVEN_UTILIZATION_PERCENT
     ) {
-      return 80;
+      return QUALITY_SCORE_THRESHOLDS.TARGET_MARGIN_LOW_BREAK_EVEN_SCORE;
     }
 
     if (input.grossMarginPercent >= input.minTargetMarginPercent) {
-      return 70;
+      return QUALITY_SCORE_THRESHOLDS.TARGET_MARGIN_HIGH_BREAK_EVEN_SCORE;
     }
 
-    if (input.grossMarginPercent >= 10) {
-      return 45;
+    if (input.grossMarginPercent >= FINANCIAL_ANALYSIS_THRESHOLDS.VERY_LOW_MARGIN_PERCENT) {
+      return QUALITY_SCORE_THRESHOLDS.LOW_MARGIN_SCORE;
     }
 
     if (input.grossMarginPercent >= 0) {
-      return 25;
+      return QUALITY_SCORE_THRESHOLDS.VERY_LOW_MARGIN_SCORE;
     }
 
-    return 0;
+    return QUALITY_SCORE_THRESHOLDS.MIN_SCORE;
   }
 
   private calculateItineraryBalanceScore(
@@ -205,7 +228,7 @@ export class PackageQualityScoreService {
     maxDailyFatigueScore: number,
   ): number {
     if (!dailyFatigueResults?.length) {
-      return 0;
+      return QUALITY_SCORE_THRESHOLDS.MIN_SCORE;
     }
 
     const averageDailyBalance =
@@ -214,19 +237,19 @@ export class PackageQualityScoreService {
 
     const criticalDayPenalty =
       dailyFatigueResults.filter((result) => result.fatigueLevel === FatigueLevel.CRITICAL).length *
-      5;
+      QUALITY_SCORE_THRESHOLDS.CRITICAL_DAY_BALANCE_PENALTY_POINTS;
 
     const consecutiveHighFatiguePenalty = this.hasConsecutiveHighFatigueDays(
       dailyFatigueResults,
       maxDailyFatigueScore,
     )
-      ? 10
-      : 0;
+      ? QUALITY_SCORE_THRESHOLDS.CONSECUTIVE_HIGH_FATIGUE_PENALTY_POINTS
+      : QUALITY_SCORE_THRESHOLDS.MIN_SCORE;
 
     return this.clamp(
       Math.round(averageDailyBalance - criticalDayPenalty - consecutiveHighFatiguePenalty),
-      0,
-      100,
+      QUALITY_SCORE_THRESHOLDS.MIN_SCORE,
+      QUALITY_SCORE_THRESHOLDS.MAX_SCORE,
     );
   }
 
@@ -235,7 +258,7 @@ export class PackageQualityScoreService {
     maxTransferMinutesPerDay: number,
   ): number {
     if (!itineraryMetrics?.length) {
-      return 50;
+      return QUALITY_SCORE_THRESHOLDS.DEFAULT_OPERATIONAL_FEASIBILITY_SCORE;
     }
 
     let shortBufferCount = 0;
@@ -253,16 +276,16 @@ export class PackageQualityScoreService {
 
       const totalTransferMinutes = metric.transferMinutes + metric.flightMinutes;
 
-      if (totalTransferMinutes > 240) {
-        transferHeavyPenalty += 20;
+      if (totalTransferMinutes > ITINERARY_RULE_THRESHOLDS.EXCESSIVE_TRANSFER_MINUTES) {
+        transferHeavyPenalty += QUALITY_SCORE_THRESHOLDS.EXCESSIVE_TRANSFER_PENALTY_POINTS;
       } else if (totalTransferMinutes > maxTransferMinutesPerDay) {
-        transferHeavyPenalty += 10;
+        transferHeavyPenalty += QUALITY_SCORE_THRESHOLDS.HIGH_TRANSFER_PENALTY_POINTS;
       }
 
-      if (metric.dayDurationMinutes > 14 * 60) {
-        longDayPenalty += 20;
-      } else if (metric.dayDurationMinutes > 12 * 60) {
-        longDayPenalty += 10;
+      if (metric.dayDurationMinutes > ITINERARY_RULE_THRESHOLDS.VERY_LONG_DAY_MINUTES) {
+        longDayPenalty += QUALITY_SCORE_THRESHOLDS.VERY_LONG_DAY_PENALTY_POINTS;
+      } else if (metric.dayDurationMinutes > ITINERARY_RULE_THRESHOLDS.LONG_DAY_MINUTES) {
+        longDayPenalty += QUALITY_SCORE_THRESHOLDS.LONG_DAY_PENALTY_POINTS;
       }
 
       majorItemsCount += metric.activityCount + metric.majorActivityCount;
@@ -274,15 +297,23 @@ export class PackageQualityScoreService {
       const current = sortedMetrics[index];
 
       if (previous.finishesLate && current.startsEarly) {
-        lateFinishEarlyStartPenalty += 10;
+        lateFinishEarlyStartPenalty +=
+          QUALITY_SCORE_THRESHOLDS.LATE_FINISH_EARLY_START_PENALTY_POINTS;
       }
     }
 
-    if (majorItemsCount > 0 && missingTimingItemsCount / majorItemsCount > 0.2) {
-      missingTimingDataPenalty = 10;
+    if (
+      majorItemsCount > 0 &&
+      missingTimingItemsCount / majorItemsCount >
+        QUALITY_SCORE_THRESHOLDS.INCOMPLETE_TIMING_DATA_SHARE
+    ) {
+      missingTimingDataPenalty = QUALITY_SCORE_THRESHOLDS.INCOMPLETE_TIMING_DATA_PENALTY_POINTS;
     }
 
-    const shortBufferPenalty = Math.min(shortBufferCount * 10, 30);
+    const shortBufferPenalty = Math.min(
+      shortBufferCount * QUALITY_SCORE_THRESHOLDS.SHORT_BUFFER_PENALTY_POINTS,
+      QUALITY_SCORE_THRESHOLDS.MAX_SHORT_BUFFER_PENALTY_POINTS,
+    );
 
     const totalPenalty =
       shortBufferPenalty +
@@ -291,7 +322,11 @@ export class PackageQualityScoreService {
       lateFinishEarlyStartPenalty +
       missingTimingDataPenalty;
 
-    return this.clamp(100 - totalPenalty, 0, 100);
+    return this.clamp(
+      QUALITY_SCORE_THRESHOLDS.MAX_SCORE - totalPenalty,
+      QUALITY_SCORE_THRESHOLDS.MIN_SCORE,
+      QUALITY_SCORE_THRESHOLDS.MAX_SCORE,
+    );
   }
 
   private calculateCostStructureScore(
@@ -301,7 +336,7 @@ export class PackageQualityScoreService {
     const financial = this.requireFinancialMetrics(context);
 
     if (costStructureMetrics.requiredCostItemsCount === 0) {
-      return 0;
+      return QUALITY_SCORE_THRESHOLDS.MIN_SCORE;
     }
 
     let penalty = 0;
@@ -311,36 +346,48 @@ export class PackageQualityScoreService {
     const flightShare = this.getCategorySharePercent(context, CostCategory.FLIGHT);
     const otherShare = this.getCategorySharePercent(context, CostCategory.OTHER);
 
-    if (hotelShare > 45) {
-      penalty += 15;
+    if (hotelShare > QUALITY_SCORE_THRESHOLDS.HOTEL_COST_SHARE_PENALTY_THRESHOLD) {
+      penalty += QUALITY_SCORE_THRESHOLDS.COST_CATEGORY_PENALTY_POINTS;
     }
 
-    if (transportShare > 35) {
-      penalty += 15;
+    if (transportShare > QUALITY_SCORE_THRESHOLDS.TRANSPORT_COST_SHARE_PENALTY_THRESHOLD) {
+      penalty += QUALITY_SCORE_THRESHOLDS.COST_CATEGORY_PENALTY_POINTS;
     }
 
-    if (flightShare > 50) {
-      penalty += 10;
+    if (flightShare > QUALITY_SCORE_THRESHOLDS.FLIGHT_COST_SHARE_PENALTY_THRESHOLD) {
+      penalty += QUALITY_SCORE_THRESHOLDS.FLIGHT_COST_PENALTY_POINTS;
     }
 
-    if (otherShare > 25) {
-      penalty += 10;
-    }
-
-    if (costStructureMetrics.largestSupplierSharePercent > 50) {
-      penalty += 20;
-    } else if (costStructureMetrics.largestSupplierSharePercent > 35) {
-      penalty += 10;
+    if (otherShare > QUALITY_SCORE_THRESHOLDS.OTHER_COST_SHARE_PENALTY_THRESHOLD) {
+      penalty += QUALITY_SCORE_THRESHOLDS.OTHER_COST_PENALTY_POINTS;
     }
 
     if (
-      costStructureMetrics.fixedCostSharePercent > 50 &&
-      financial.breakEvenUtilizationPercent > 80
+      costStructureMetrics.largestSupplierSharePercent >
+      QUALITY_SCORE_THRESHOLDS.HIGH_SUPPLIER_SHARE_PENALTY_THRESHOLD
     ) {
-      penalty += 15;
+      penalty += QUALITY_SCORE_THRESHOLDS.HIGH_SUPPLIER_SHARE_PENALTY_POINTS;
+    } else if (
+      costStructureMetrics.largestSupplierSharePercent >
+      QUALITY_SCORE_THRESHOLDS.SUPPLIER_SHARE_PENALTY_THRESHOLD
+    ) {
+      penalty += QUALITY_SCORE_THRESHOLDS.SUPPLIER_SHARE_PENALTY_POINTS;
     }
 
-    return this.clamp(100 - penalty, 0, 100);
+    if (
+      costStructureMetrics.fixedCostSharePercent >
+        QUALITY_SCORE_THRESHOLDS.HIGH_FIXED_COST_SHARE_THRESHOLD &&
+      financial.breakEvenUtilizationPercent >
+        QUALITY_SCORE_THRESHOLDS.HIGH_FIXED_COST_BREAK_EVEN_UTILIZATION_THRESHOLD
+    ) {
+      penalty += QUALITY_SCORE_THRESHOLDS.FIXED_COST_EXPOSURE_PENALTY_POINTS;
+    }
+
+    return this.clamp(
+      QUALITY_SCORE_THRESHOLDS.MAX_SCORE - penalty,
+      QUALITY_SCORE_THRESHOLDS.MIN_SCORE,
+      QUALITY_SCORE_THRESHOLDS.MAX_SCORE,
+    );
   }
 
   private getCategorySharePercent(context: AnalysisContext, category: CostCategory): number {
@@ -381,7 +428,7 @@ export class PackageQualityScoreService {
 
   private toNumber(value: string | number | null | undefined): number {
     if (value === null || value === undefined) {
-      return 0;
+      return QUALITY_SCORE_THRESHOLDS.MIN_SCORE;
     }
 
     const parsed = Number(value);
@@ -393,6 +440,8 @@ export class PackageQualityScoreService {
   }
 
   private round(value: number): number {
-    return Math.round(value * 100) / 100;
+    return (
+      Math.round(value * NUMERIC_FORMAT.PERCENT_MULTIPLIER) / NUMERIC_FORMAT.PERCENT_MULTIPLIER
+    );
   }
 }

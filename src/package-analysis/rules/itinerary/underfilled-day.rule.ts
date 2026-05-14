@@ -5,6 +5,7 @@ import { RecommendationSeverity } from '../../../common/enums/recommendation-sev
 import { AnalysisContext } from '../../types/analysis-context.type';
 import { RecommendationDraft } from '../../types/recommendation-draft.type';
 import { RecommendationRule } from '../recommendation-rule.interface';
+import { ITINERARY_RULE_THRESHOLDS } from '../../constants/analysis-thresholds.constants';
 
 @Injectable()
 export class UnderfilledDayRule implements RecommendationRule {
@@ -18,8 +19,12 @@ export class UnderfilledDayRule implements RecommendationRule {
       .filter(
         (metric) =>
           !metric.isRestDay &&
-          ((metric.activityCount === 0 && metric.freeTimeMinutes < 240) ||
-            (metric.activityCount === 1 && metric.dayDurationMinutes < 240)),
+          ((metric.activityCount === 0 &&
+            metric.freeTimeMinutes <
+              ITINERARY_RULE_THRESHOLDS.MIN_FREE_TIME_FOR_EMPTY_NON_REST_DAY_MINUTES) ||
+            (metric.activityCount === 1 &&
+              metric.dayDurationMinutes <
+                ITINERARY_RULE_THRESHOLDS.SHORT_ACTIVITY_DAY_DURATION_MINUTES)),
       )
       .map((metric) => ({
         ruleCode: this.code,

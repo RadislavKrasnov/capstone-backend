@@ -4,6 +4,12 @@ import { FatigueLevel } from '../../common/enums/fatigue-level.enum';
 import { ItineraryIntensity } from '../../common/enums/itinerary-intensity.enum';
 import { ItineraryItemType } from '../../common/enums/itinerary-item-type.enum';
 import { ItineraryItem } from '../../itinerary/entities/itinerary-item.entity';
+import {
+  ITINERARY_FATIGUE_MODEL,
+  ITINERARY_RULE_THRESHOLDS,
+  NUMERIC_FORMAT,
+  QUALITY_SCORE_THRESHOLDS,
+} from '../constants/analysis-thresholds.constants';
 import { AnalysisContext } from '../types/analysis-context.type';
 import {
   DailyFatigueMetric,
@@ -139,21 +145,32 @@ export class ItineraryFatigueAnalysisService {
       invalidTimingCount,
 
       activityDensity:
-        activeDayMinutes > 0 ? this.round(activityItems.length / (activeDayMinutes / 60)) : 0,
+        activeDayMinutes > 0
+          ? this.round(activityItems.length / (activeDayMinutes / NUMERIC_FORMAT.MINUTES_PER_HOUR))
+          : 0,
 
       transferSharePercent:
         activeDayMinutes > 0
-          ? this.round(((transferMinutes + flightMinutes) / activeDayMinutes) * 100)
+          ? this.round(
+              ((transferMinutes + flightMinutes) / activeDayMinutes) *
+                NUMERIC_FORMAT.PERCENT_MULTIPLIER,
+            )
           : 0,
 
       restRatioPercent:
-        activeDayMinutes > 0 ? this.round((restMinutes / activeDayMinutes) * 100) : 0,
+        activeDayMinutes > 0
+          ? this.round((restMinutes / activeDayMinutes) * NUMERIC_FORMAT.PERCENT_MULTIPLIER)
+          : 0,
 
-      hasMealBreak: mealMinutes >= 30 || items.some((item) => item.type === ItineraryItemType.MEAL),
+      hasMealBreak:
+        mealMinutes >= ITINERARY_RULE_THRESHOLDS.MIN_MEAL_BREAK_MINUTES ||
+        items.some((item) => item.type === ItineraryItemType.MEAL),
       startsEarly:
-        this.getFirstStartMinute(items) !== null && (this.getFirstStartMinute(items) ?? 0) < 7 * 60,
+        this.getFirstStartMinute(items) !== null &&
+        (this.getFirstStartMinute(items) ?? 0) < ITINERARY_FATIGUE_MODEL.EARLY_START_MINUTES,
       finishesLate:
-        this.getLastEndMinute(items) !== null && (this.getLastEndMinute(items) ?? 0) > 22 * 60,
+        this.getLastEndMinute(items) !== null &&
+        (this.getLastEndMinute(items) ?? 0) > ITINERARY_FATIGUE_MODEL.LATE_FINISH_MINUTES,
     };
   }
 
@@ -161,19 +178,34 @@ export class ItineraryFatigueAnalysisService {
     dayMetric: DayItineraryMetric,
     items: ItineraryItem[],
   ): DailyFatigueMetric {
-    const activityLoad = dayMetric.activityCount * 8;
+    const activityLoad = dayMetric.activityCount * ITINERARY_FATIGUE_MODEL.ACTIVITY_LOAD_POINTS;
 
-    const transferLoad = dayMetric.transferMinutes * 0.12 + dayMetric.flightMinutes * 0.08;
+    const transferLoad =
+      dayMetric.transferMinutes * ITINERARY_FATIGUE_MODEL.TRANSFER_LOAD_PER_MINUTE +
+      dayMetric.flightMinutes * ITINERARY_FATIGUE_MODEL.FLIGHT_LOAD_PER_MINUTE;
 
     const intensityLoad = this.calculateIntensityPoints(items);
 
     const longDayPenalty = this.calculateLongDayPenalty(dayMetric.dayDurationMinutes);
-    const shortBufferPenalty = Math.min(dayMetric.shortBufferCount * 10, 25);
-    const lateFinishPenalty = dayMetric.finishesLate ? 10 : 0;
-    const earlyStartPenalty = dayMetric.startsEarly ? 10 : 0;
+    const shortBufferPenalty = Math.min(
+      dayMetric.shortBufferCount * ITINERARY_FATIGUE_MODEL.SHORT_BUFFER_PENALTY_POINTS,
+      ITINERARY_FATIGUE_MODEL.MAX_SHORT_BUFFER_PENALTY_POINTS,
+    );
+    const lateFinishPenalty = dayMetric.finishesLate
+      ? ITINERARY_FATIGUE_MODEL.LATE_FINISH_PENALTY_POINTS
+      : 0;
+    const earlyStartPenalty = dayMetric.startsEarly
+      ? ITINERARY_FATIGUE_MODEL.EARLY_START_PENALTY_POINTS
+      : 0;
     const noMealBreakPenalty =
-      dayMetric.dayDurationMinutes > 360 && !dayMetric.hasMealBreak ? 10 : 0;
-    const highIntensityPenalty = dayMetric.highIntensityActivityCount >= 3 ? 10 : 0;
+      dayMetric.dayDurationMinutes >
+        ITINERARY_RULE_THRESHOLDS.LONG_DAY_REQUIRES_MEAL_BREAK_MINUTES && !dayMetric.hasMealBreak
+        ? ITINERARY_FATIGUE_MODEL.NO_MEAL_BREAK_PENALTY_POINTS
+        : 0;
+    const highIntensityPenalty =
+      dayMetric.highIntensityActivityCount >= ITINERARY_FATIGUE_MODEL.HIGH_INTENSITY_ACTIVITY_COUNT
+        ? ITINERARY_FATIGUE_MODEL.HIGH_INTENSITY_DAY_PENALTY_POINTS
+        : 0;
 
     const compressionPenalty =
       longDayPenalty +
@@ -183,13 +215,20 @@ export class ItineraryFatigueAnalysisService {
       noMealBreakPenalty +
       highIntensityPenalty;
 
-    const mealCredit = Math.min(dayMetric.mealMinutes * 0.03, 6);
-    const restCredit = Math.min(dayMetric.freeTimeMinutes * 0.08 + mealCredit, 20);
+    const mealCredit = Math.min(
+      dayMetric.mealMinutes * ITINERARY_FATIGUE_MODEL.MEAL_REST_CREDIT_PER_MINUTE,
+      ITINERARY_FATIGUE_MODEL.MAX_MEAL_REST_CREDIT_POINTS,
+    );
+    const restCredit = Math.min(
+      dayMetric.freeTimeMinutes * ITINERARY_FATIGUE_MODEL.FREE_TIME_REST_CREDIT_PER_MINUTE +
+        mealCredit,
+      ITINERARY_FATIGUE_MODEL.MAX_TOTAL_REST_CREDIT_POINTS,
+    );
 
     const fatigueScore = this.clamp(
       Math.round(activityLoad + transferLoad + intensityLoad + compressionPenalty - restCredit),
-      0,
-      100,
+      QUALITY_SCORE_THRESHOLDS.MIN_SCORE,
+      QUALITY_SCORE_THRESHOLDS.MAX_SCORE,
     );
 
     const balanceScore = this.calculateBalanceScore(dayMetric, fatigueScore);
@@ -214,30 +253,47 @@ export class ItineraryFatigueAnalysisService {
   }
 
   private calculateBalanceScore(dayMetric: DayItineraryMetric, fatigueScore: number): number {
-    let balanceScore = this.clamp(100 - fatigueScore, 0, 100);
+    let balanceScore = this.clamp(
+      QUALITY_SCORE_THRESHOLDS.MAX_SCORE - fatigueScore,
+      QUALITY_SCORE_THRESHOLDS.MIN_SCORE,
+      QUALITY_SCORE_THRESHOLDS.MAX_SCORE,
+    );
 
     if (dayMetric.isRestDay) {
       return balanceScore;
     }
 
-    if (dayMetric.activityCount === 0 && dayMetric.freeTimeMinutes < 240) {
-      balanceScore = Math.min(balanceScore, 60);
+    if (
+      dayMetric.activityCount === 0 &&
+      dayMetric.freeTimeMinutes <
+        ITINERARY_RULE_THRESHOLDS.MIN_FREE_TIME_FOR_EMPTY_NON_REST_DAY_MINUTES
+    ) {
+      balanceScore = Math.min(
+        balanceScore,
+        ITINERARY_FATIGUE_MODEL.REST_DAY_LOW_ACTIVITY_BALANCE_CAP,
+      );
     }
 
-    if (dayMetric.activityCount === 1 && dayMetric.dayDurationMinutes < 240) {
-      balanceScore = Math.min(balanceScore, 75);
+    if (
+      dayMetric.activityCount === 1 &&
+      dayMetric.dayDurationMinutes < ITINERARY_RULE_THRESHOLDS.SHORT_ACTIVITY_DAY_DURATION_MINUTES
+    ) {
+      balanceScore = Math.min(
+        balanceScore,
+        ITINERARY_FATIGUE_MODEL.SHORT_SINGLE_ACTIVITY_BALANCE_CAP,
+      );
     }
 
     return balanceScore;
   }
 
   private calculateLongDayPenalty(dayDurationMinutes: number): number {
-    if (dayDurationMinutes > 14 * 60) {
-      return 25;
+    if (dayDurationMinutes > ITINERARY_RULE_THRESHOLDS.VERY_LONG_DAY_MINUTES) {
+      return ITINERARY_FATIGUE_MODEL.VERY_LONG_DAY_PENALTY_POINTS;
     }
 
-    if (dayDurationMinutes > 12 * 60) {
-      return 15;
+    if (dayDurationMinutes > ITINERARY_RULE_THRESHOLDS.LONG_DAY_MINUTES) {
+      return ITINERARY_FATIGUE_MODEL.LONG_DAY_PENALTY_POINTS;
     }
 
     return 0;
@@ -250,33 +306,37 @@ export class ItineraryFatigueAnalysisService {
       }
 
       if (item.intensity === ItineraryIntensity.HIGH) {
-        return sum + 10;
+        return sum + ITINERARY_FATIGUE_MODEL.HIGH_INTENSITY_ACTIVITY_POINTS;
       }
 
       if (item.intensity === ItineraryIntensity.LOW) {
-        return sum + 3;
+        return sum + ITINERARY_FATIGUE_MODEL.LOW_INTENSITY_ACTIVITY_POINTS;
       }
 
-      return sum + 6;
+      return sum + ITINERARY_FATIGUE_MODEL.MEDIUM_INTENSITY_ACTIVITY_POINTS;
     }, 0);
   }
 
   private buildReasons(dayMetric: DayItineraryMetric, fatigueScore: number): string[] {
     const reasons: string[] = [];
 
-    if (dayMetric.activityCount >= 5) {
+    if (dayMetric.activityCount >= ITINERARY_FATIGUE_MODEL.MANY_ACTIVITIES_COUNT) {
       reasons.push(
         `${dayMetric.activityCount} activities are planned, which may overload the day.`,
       );
     }
 
-    if (dayMetric.transferMinutes > 180) {
+    if (dayMetric.transferMinutes > ITINERARY_FATIGUE_MODEL.HIGH_TRANSFER_REASON_MINUTES) {
       reasons.push(
-        `Transfer time is ${dayMetric.transferMinutes} minutes, exceeding the recommended 180-minute limit.`,
+        `Transfer time is ${dayMetric.transferMinutes} minutes, exceeding the recommended ${ITINERARY_FATIGUE_MODEL.HIGH_TRANSFER_REASON_MINUTES}-minute limit.`,
       );
     }
 
-    if (dayMetric.flightMinutes > 0 && dayMetric.transferMinutes + dayMetric.flightMinutes > 180) {
+    if (
+      dayMetric.flightMinutes > 0 &&
+      dayMetric.transferMinutes + dayMetric.flightMinutes >
+        ITINERARY_FATIGUE_MODEL.HIGH_TRANSFER_REASON_MINUTES
+    ) {
       reasons.push('Combined transfer and flight time is high for one day.');
     }
 
@@ -284,7 +344,7 @@ export class ItineraryFatigueAnalysisService {
       reasons.push('Some major itinerary items have insufficient buffer time between them.');
     }
 
-    if (dayMetric.dayDurationMinutes > 12 * 60) {
+    if (dayMetric.dayDurationMinutes > ITINERARY_RULE_THRESHOLDS.LONG_DAY_MINUTES) {
       reasons.push('The planned day is longer than 12 hours.');
     }
 
@@ -296,19 +356,28 @@ export class ItineraryFatigueAnalysisService {
       reasons.push('The day finishes after 22:00, which may reduce recovery time.');
     }
 
-    if (dayMetric.dayDurationMinutes > 360 && !dayMetric.hasMealBreak) {
+    if (
+      dayMetric.dayDurationMinutes >
+        ITINERARY_RULE_THRESHOLDS.LONG_DAY_REQUIRES_MEAL_BREAK_MINUTES &&
+      !dayMetric.hasMealBreak
+    ) {
       reasons.push('No meal break is scheduled during a long day.');
     }
 
-    if (dayMetric.freeTimeMinutes < 60 && dayMetric.activityCount >= 4) {
+    if (
+      dayMetric.freeTimeMinutes < ITINERARY_RULE_THRESHOLDS.MIN_REST_MINUTES_FOR_BUSY_DAY &&
+      dayMetric.activityCount >= ITINERARY_RULE_THRESHOLDS.BUSY_DAY_ACTIVITY_COUNT
+    ) {
       reasons.push('Limited free time is planned despite a busy activity schedule.');
     }
 
-    if (dayMetric.highIntensityActivityCount >= 3) {
+    if (
+      dayMetric.highIntensityActivityCount >= ITINERARY_FATIGUE_MODEL.HIGH_INTENSITY_ACTIVITY_COUNT
+    ) {
       reasons.push('Multiple high-intensity activities are planned in one day.');
     }
 
-    if (dayMetric.activityDensity > 0.65) {
+    if (dayMetric.activityDensity > ITINERARY_RULE_THRESHOLDS.HIGH_ACTIVITY_DENSITY) {
       reasons.push('Activity density is high, which may make the schedule feel rushed.');
     }
 
@@ -316,14 +385,19 @@ export class ItineraryFatigueAnalysisService {
       reasons.push('The day is marked as a planned rest day.');
     }
 
-    if (!dayMetric.isRestDay && dayMetric.activityCount === 0 && dayMetric.freeTimeMinutes < 240) {
+    if (
+      !dayMetric.isRestDay &&
+      dayMetric.activityCount === 0 &&
+      dayMetric.freeTimeMinutes <
+        ITINERARY_RULE_THRESHOLDS.MIN_FREE_TIME_FOR_EMPTY_NON_REST_DAY_MINUTES
+    ) {
       reasons.push('The day appears underfilled and may reduce perceived package value.');
     }
 
     if (
       !dayMetric.isRestDay &&
       dayMetric.activityCount === 1 &&
-      dayMetric.dayDurationMinutes < 240
+      dayMetric.dayDurationMinutes < ITINERARY_RULE_THRESHOLDS.SHORT_ACTIVITY_DAY_DURATION_MINUTES
     ) {
       reasons.push('The day has only one short planned activity and may feel weakly filled.');
     }
@@ -338,7 +412,7 @@ export class ItineraryFatigueAnalysisService {
       );
     }
 
-    if (!reasons.length && fatigueScore <= 40) {
+    if (!reasons.length && fatigueScore <= ITINERARY_FATIGUE_MODEL.BALANCED_DAY_MAX_FATIGUE_SCORE) {
       reasons.push('The day has a balanced activity and rest structure.');
     }
 
@@ -472,7 +546,11 @@ export class ItineraryFatigueAnalysisService {
     let count = 0;
 
     for (let index = 1; index < sortedResults.length; index += 1) {
-      if (sortedResults[index - 1].fatigueScore > 65 && sortedResults[index].fatigueScore > 65) {
+      if (
+        sortedResults[index - 1].fatigueScore >
+          ITINERARY_FATIGUE_MODEL.CONSECUTIVE_HIGH_FATIGUE_SCORE &&
+        sortedResults[index].fatigueScore > ITINERARY_FATIGUE_MODEL.CONSECUTIVE_HIGH_FATIGUE_SCORE
+      ) {
         count += 1;
       }
     }
@@ -509,19 +587,19 @@ export class ItineraryFatigueAnalysisService {
       return null;
     }
 
-    return hours * 60 + minutes;
+    return hours * NUMERIC_FORMAT.MINUTES_PER_HOUR + minutes;
   }
 
   private resolveFatigueLevel(fatigueScore: number): FatigueLevel {
-    if (fatigueScore >= 81) {
+    if (fatigueScore >= ITINERARY_FATIGUE_MODEL.CRITICAL_FATIGUE_SCORE) {
       return FatigueLevel.CRITICAL;
     }
 
-    if (fatigueScore >= 66) {
+    if (fatigueScore >= ITINERARY_FATIGUE_MODEL.HIGH_FATIGUE_SCORE) {
       return FatigueLevel.HIGH;
     }
 
-    if (fatigueScore >= 41) {
+    if (fatigueScore >= ITINERARY_FATIGUE_MODEL.MODERATE_FATIGUE_SCORE) {
       return FatigueLevel.MODERATE;
     }
 
@@ -533,6 +611,8 @@ export class ItineraryFatigueAnalysisService {
   }
 
   private round(value: number): number {
-    return Math.round(value * 100) / 100;
+    return (
+      Math.round(value * NUMERIC_FORMAT.PERCENT_MULTIPLIER) / NUMERIC_FORMAT.PERCENT_MULTIPLIER
+    );
   }
 }

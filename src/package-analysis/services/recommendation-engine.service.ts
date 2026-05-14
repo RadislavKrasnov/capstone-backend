@@ -33,6 +33,7 @@ import { MissingCostDataRule } from '../rules/validation/missing-cost-data.rule'
 import { MissingItineraryDataRule } from '../rules/validation/missing-itinerary-data.rule';
 import { AnalysisContext } from '../types/analysis-context.type';
 import { RecommendationDraft } from '../types/recommendation-draft.type';
+import { RECOMMENDATION_PRIORITY } from '../constants/analysis-thresholds.constants';
 
 @Injectable()
 export class RecommendationEngineService {
@@ -227,8 +228,10 @@ export class RecommendationEngineService {
     context: AnalysisContext,
   ): number {
     return (
-      this.getSeverityWeight(recommendation.severity) * 100 +
-      this.getCategoryWeight(recommendation.category) * 10 +
+      this.getSeverityWeight(recommendation.severity) *
+        RECOMMENDATION_PRIORITY.SEVERITY_MULTIPLIER +
+      this.getCategoryWeight(recommendation.category) *
+        RECOMMENDATION_PRIORITY.CATEGORY_MULTIPLIER +
       this.getImpactWeight(recommendation, context)
     );
   }
@@ -261,7 +264,10 @@ export class RecommendationEngineService {
     if (recommendation.affectedMetric === 'grossMarginPercent' && financial) {
       const targetMargin = Number(context.configuration.minTargetMarginPercent);
 
-      return Math.min(Math.abs(targetMargin - financial.grossMarginPercent), 20);
+      return Math.min(
+        Math.abs(targetMargin - financial.grossMarginPercent),
+        RECOMMENDATION_PRIORITY.MAX_IMPACT_WEIGHT,
+      );
     }
 
     if (recommendation.affectedMetric === 'fatigueScore' && recommendation.affectedDayId) {
@@ -286,7 +292,11 @@ export class RecommendationEngineService {
         const transferMinutes = metric.transferMinutes + metric.flightMinutes;
 
         return Math.min(
-          Math.max(0, (transferMinutes - context.configuration.maxTransferMinutesPerDay) / 10),
+          Math.max(
+            0,
+            (transferMinutes - context.configuration.maxTransferMinutesPerDay) /
+              RECOMMENDATION_PRIORITY.TRANSFER_DELAY_IMPACT_DIVISOR,
+          ),
           20,
         );
       }
@@ -298,18 +308,27 @@ export class RecommendationEngineService {
       );
 
       if (metric) {
-        return Math.min(Math.max(0, metric.transferSharePercent - 35), 20);
+        return Math.min(
+          Math.max(
+            0,
+            metric.transferSharePercent - RECOMMENDATION_PRIORITY.TRANSFER_SHARE_BASELINE_PERCENT,
+          ),
+          RECOMMENDATION_PRIORITY.MAX_IMPACT_WEIGHT,
+        );
       }
     }
 
     if (recommendation.affectedMetric === 'largestSupplierSharePercent') {
       const largestSupplierShare = financial?.supplierCostBreakdown[0]?.sharePercent ?? 0;
 
-      return Math.min(Math.max(0, largestSupplierShare - 35), 20);
+      return Math.min(
+        Math.max(0, largestSupplierShare - RECOMMENDATION_PRIORITY.SUPPLIER_SHARE_BASELINE_PERCENT),
+        RECOMMENDATION_PRIORITY.MAX_IMPACT_WEIGHT,
+      );
     }
 
     if (recommendation.affectedMetric?.includes('CostSharePercent')) {
-      return 10;
+      return RECOMMENDATION_PRIORITY.COST_SHARE_IMPACT_WEIGHT;
     }
 
     return 0;

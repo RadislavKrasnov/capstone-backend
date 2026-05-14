@@ -5,6 +5,7 @@ import { RecommendationSeverity } from '../../../common/enums/recommendation-sev
 import { AnalysisContext } from '../../types/analysis-context.type';
 import { RecommendationDraft } from '../../types/recommendation-draft.type';
 import { RecommendationRule } from '../recommendation-rule.interface';
+import { RECOMMENDATION_RULE_THRESHOLDS } from '../../constants/analysis-thresholds.constants';
 
 @Injectable()
 export class VeryLowMarginRule implements RecommendationRule {
@@ -14,7 +15,11 @@ export class VeryLowMarginRule implements RecommendationRule {
   evaluate(context: AnalysisContext): RecommendationDraft[] {
     const financial = context.financialMetrics;
 
-    if (!financial || financial.grossProfit < 0 || financial.grossMarginPercent >= 10) {
+    if (
+      !financial ||
+      financial.grossProfit < 0 ||
+      financial.grossMarginPercent >= RECOMMENDATION_RULE_THRESHOLDS.VERY_LOW_MARGIN_PERCENT
+    ) {
       return [];
     }
 

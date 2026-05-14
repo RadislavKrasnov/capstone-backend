@@ -6,6 +6,7 @@ import { RecommendationSeverity } from '../../../common/enums/recommendation-sev
 import { AnalysisContext } from '../../types/analysis-context.type';
 import { RecommendationDraft } from '../../types/recommendation-draft.type';
 import { RecommendationRule } from '../recommendation-rule.interface';
+import { QUALITY_SCORE_THRESHOLDS } from '../../constants/analysis-thresholds.constants';
 
 @Injectable()
 export class CriticalFatigueDayRule implements RecommendationRule {
@@ -22,8 +23,9 @@ export class CriticalFatigueDayRule implements RecommendationRule {
         category: this.category,
         severity: RecommendationSeverity.CRITICAL,
         title: `Day ${result.dayNumber} has critical fatigue`,
-        explanation: `Fatigue score is ${result.fatigueScore}/100. Main reasons: ${result.reasons.join(' ')}`,
-        suggestedAction: 'Move one major activity or transfer to another day and add recovery time.',
+        explanation: `Fatigue score is ${result.fatigueScore}/${QUALITY_SCORE_THRESHOLDS.MAX_SCORE}. Main reasons: ${result.reasons.join(' ')}`,
+        suggestedAction:
+          'Move one major activity or transfer to another day and add recovery time.',
         affectedMetric: 'fatigueScore',
         affectedDayId: result.dayId,
       }));

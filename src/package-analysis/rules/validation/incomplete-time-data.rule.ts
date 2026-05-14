@@ -5,6 +5,10 @@ import { RecommendationSeverity } from '../../../common/enums/recommendation-sev
 import { AnalysisContext } from '../../types/analysis-context.type';
 import { RecommendationDraft } from '../../types/recommendation-draft.type';
 import { RecommendationRule } from '../recommendation-rule.interface';
+import {
+  NUMERIC_FORMAT,
+  RECOMMENDATION_RULE_THRESHOLDS,
+} from '../../constants/analysis-thresholds.constants';
 
 @Injectable()
 export class IncompleteTimeDataRule implements RecommendationRule {
@@ -24,11 +28,15 @@ export class IncompleteTimeDataRule implements RecommendationRule {
       0,
     );
 
-    if (totalMajorItems === 0 || incompleteItems / totalMajorItems <= 0.2) {
+    if (
+      totalMajorItems === 0 ||
+      incompleteItems / totalMajorItems <= RECOMMENDATION_RULE_THRESHOLDS.INCOMPLETE_TIME_DATA_SHARE
+    ) {
       return [];
     }
 
-    const incompletePercent = (incompleteItems / totalMajorItems) * 100;
+    const incompletePercent =
+      (incompleteItems / totalMajorItems) * NUMERIC_FORMAT.PERCENT_MULTIPLIER;
 
     return [
       {

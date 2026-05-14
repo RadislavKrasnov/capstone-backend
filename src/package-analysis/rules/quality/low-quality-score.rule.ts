@@ -5,6 +5,7 @@ import { RecommendationSeverity } from '../../../common/enums/recommendation-sev
 import { AnalysisContext } from '../../types/analysis-context.type';
 import { RecommendationDraft } from '../../types/recommendation-draft.type';
 import { RecommendationRule } from '../recommendation-rule.interface';
+import { QUALITY_SCORE_THRESHOLDS } from '../../constants/analysis-thresholds.constants';
 
 @Injectable()
 export class LowQualityScoreRule implements RecommendationRule {
@@ -14,7 +15,7 @@ export class LowQualityScoreRule implements RecommendationRule {
   evaluate(context: AnalysisContext): RecommendationDraft[] {
     const qualityScore = context.qualityScore;
 
-    if (!qualityScore || qualityScore.overallScore >= 55) {
+    if (!qualityScore || qualityScore.overallScore >= QUALITY_SCORE_THRESHOLDS.LOW_OVERALL_SCORE) {
       return [];
     }
 
@@ -25,11 +26,11 @@ export class LowQualityScoreRule implements RecommendationRule {
         ruleCode: this.code,
         category: weakestArea.category,
         severity:
-          qualityScore.overallScore < 40
+          qualityScore.overallScore < QUALITY_SCORE_THRESHOLDS.CRITICAL_OVERALL_SCORE
             ? RecommendationSeverity.CRITICAL
             : RecommendationSeverity.HIGH,
         title: 'Overall package quality is too low for publication',
-        explanation: `Overall quality score is ${qualityScore.overallScore}/100. The weakest area is ${weakestArea.label}, which should be reviewed before publishing.`,
+        explanation: `Overall quality score is ${qualityScore.overallScore}/${QUALITY_SCORE_THRESHOLDS.MAX_SCORE}. The weakest area is ${weakestArea.label}, which should be reviewed before publishing.`,
         suggestedAction: weakestArea.action,
         affectedMetric: 'overallScore',
       },

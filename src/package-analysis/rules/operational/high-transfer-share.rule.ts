@@ -5,6 +5,7 @@ import { RecommendationSeverity } from '../../../common/enums/recommendation-sev
 import { AnalysisContext } from '../../types/analysis-context.type';
 import { RecommendationDraft } from '../../types/recommendation-draft.type';
 import { RecommendationRule } from '../recommendation-rule.interface';
+import { ITINERARY_RULE_THRESHOLDS } from '../../constants/analysis-thresholds.constants';
 
 @Injectable()
 export class HighTransferShareRule implements RecommendationRule {
@@ -15,12 +16,15 @@ export class HighTransferShareRule implements RecommendationRule {
     const itineraryMetrics = context.itineraryMetrics ?? [];
 
     return itineraryMetrics
-      .filter((metric) => metric.transferSharePercent > 35)
+      .filter(
+        (metric) =>
+          metric.transferSharePercent > ITINERARY_RULE_THRESHOLDS.MAX_TRANSFER_SHARE_PERCENT,
+      )
       .map((metric) => ({
         ruleCode: this.code,
         category: this.category,
         severity:
-          metric.transferSharePercent > 50
+          metric.transferSharePercent > ITINERARY_RULE_THRESHOLDS.HIGH_TRANSFER_SHARE_PERCENT
             ? RecommendationSeverity.HIGH
             : RecommendationSeverity.MEDIUM,
         title: `Day ${metric.dayNumber} is transfer-heavy`,

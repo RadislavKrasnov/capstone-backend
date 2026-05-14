@@ -5,6 +5,7 @@ import { RecommendationSeverity } from '../../../common/enums/recommendation-sev
 import { AnalysisContext } from '../../types/analysis-context.type';
 import { RecommendationDraft } from '../../types/recommendation-draft.type';
 import { RecommendationRule } from '../recommendation-rule.interface';
+import { ITINERARY_RULE_THRESHOLDS } from '../../constants/analysis-thresholds.constants';
 
 @Injectable()
 export class ExcessiveTransferTimeRule implements RecommendationRule {
@@ -27,7 +28,7 @@ export class ExcessiveTransferTimeRule implements RecommendationRule {
           ruleCode: this.code,
           category: this.category,
           severity:
-            totalTransferMinutes > 240
+            totalTransferMinutes > ITINERARY_RULE_THRESHOLDS.EXCESSIVE_TRANSFER_MINUTES
               ? RecommendationSeverity.HIGH
               : RecommendationSeverity.MEDIUM,
           title: `Day ${metric.dayNumber} has excessive transfer time`,

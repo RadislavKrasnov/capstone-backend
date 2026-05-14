@@ -5,6 +5,7 @@ import { RecommendationSeverity } from '../../../common/enums/recommendation-sev
 import { AnalysisContext } from '../../types/analysis-context.type';
 import { RecommendationDraft } from '../../types/recommendation-draft.type';
 import { RecommendationRule } from '../recommendation-rule.interface';
+import { COST_STRUCTURE_RULE_THRESHOLDS } from '../../constants/analysis-thresholds.constants';
 
 @Injectable()
 export class SupplierDependencyRiskRule implements RecommendationRule {
@@ -14,7 +15,10 @@ export class SupplierDependencyRiskRule implements RecommendationRule {
   evaluate(context: AnalysisContext): RecommendationDraft[] {
     const largestSupplier = context.financialMetrics?.supplierCostBreakdown[0];
 
-    if (!largestSupplier || largestSupplier.sharePercent <= 35) {
+    if (
+      !largestSupplier ||
+      largestSupplier.sharePercent <= COST_STRUCTURE_RULE_THRESHOLDS.MAX_SUPPLIER_SHARE_PERCENT
+    ) {
       return [];
     }
 
@@ -23,7 +27,7 @@ export class SupplierDependencyRiskRule implements RecommendationRule {
         ruleCode: this.code,
         category: this.category,
         severity:
-          largestSupplier.sharePercent > 50
+          largestSupplier.sharePercent > COST_STRUCTURE_RULE_THRESHOLDS.HIGH_SUPPLIER_SHARE_PERCENT
             ? RecommendationSeverity.HIGH
             : RecommendationSeverity.MEDIUM,
         title: 'High dependency on one supplier',

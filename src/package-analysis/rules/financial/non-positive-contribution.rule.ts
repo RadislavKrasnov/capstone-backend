@@ -25,7 +25,8 @@ export class NonPositiveContributionRule implements RecommendationRule {
         severity: RecommendationSeverity.CRITICAL,
         title: 'Contribution per traveler is not positive',
         explanation: `Contribution per person is ${financial.contributionPerPerson.toFixed(2)}, so each additional traveler does not improve profitability.`,
-        suggestedAction: 'Reduce per-person variable costs or increase the selling price before publishing this package.',
+        suggestedAction:
+          'Reduce per-person variable costs or increase the selling price before publishing this package.',
         affectedMetric: 'contributionPerPerson',
       },
     ];
