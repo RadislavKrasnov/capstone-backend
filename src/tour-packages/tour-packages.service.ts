@@ -168,6 +168,9 @@ export class TourPackagesService {
         relations: withRelations
           ? {
               agency: true,
+              highlights: true,
+              inclusions: true,
+              exclusions: true,
             }
           : undefined,
       });
@@ -245,8 +248,31 @@ export class TourPackagesService {
       currencyCode: tourPackage.currencyCode,
       status: tourPackage.status,
       internalNotes: tourPackage.internalNotes,
+      highlights: this.buildSafePackageProposalItems(tourPackage.highlights),
+      inclusions: this.buildSafePackageProposalItems(tourPackage.inclusions),
+      exclusions: this.buildSafePackageProposalItems(tourPackage.exclusions),
       createdAt: tourPackage.createdAt,
       updatedAt: tourPackage.updatedAt,
     };
+  }
+
+  private buildSafePackageProposalItems(
+    items?: Array<{
+      id: number;
+      uuid: string;
+      packageId: number;
+      text: string;
+      displayOrder: number;
+    }>,
+  ) {
+    return [...(items ?? [])]
+      .sort((a, b) => a.displayOrder - b.displayOrder)
+      .map((item) => ({
+        id: item.id,
+        uuid: item.uuid,
+        packageId: item.packageId,
+        text: item.text,
+        displayOrder: item.displayOrder,
+      }));
   }
 }

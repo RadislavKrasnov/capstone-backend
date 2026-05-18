@@ -50,6 +50,9 @@ import { HighTransferShareRule } from './rules/operational/high-transfer-share.r
 import { IncompleteTimeDataRule } from './rules/validation/incomplete-time-data.rule';
 import { MissingCostDataRule } from './rules/validation/missing-cost-data.rule';
 import { MissingItineraryDataRule } from './rules/validation/missing-itinerary-data.rule';
+import { Agency } from '../agencies/entities/agency.entity';
+import { AnalysisConfigurationsController } from './analysis-configurations.controller';
+import { AnalysisConfigurationsService } from './analysis-configurations.service';
 
 @Module({
   imports: [
@@ -65,11 +68,17 @@ import { MissingItineraryDataRule } from './rules/validation/missing-itinerary-d
       DailyFatigueResult,
       PackageScoreResult,
       GeneratedRecommendation,
+      Agency,
     ]),
   ],
-  controllers: [PackageAnalysisController, PackageAnalysisRunsController],
+  controllers: [
+    PackageAnalysisController,
+    PackageAnalysisRunsController,
+    AnalysisConfigurationsController,
+  ],
   providers: [
     PackageAnalysisService,
+    AnalysisConfigurationsService,
 
     AnalysisConfigurationResolverService,
     AnalysisInputLoaderService,
