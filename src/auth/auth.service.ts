@@ -8,13 +8,14 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcryptjs';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { StringValue } from 'ms';
 
 import { Agency } from '../agencies/entities/agency.entity';
 import { User, UserRole } from '../users/entities/user.entity';
 import { LoginDto } from './dto/login.dto';
 import { SignupDto } from './dto/signup.dto';
+import { SignupAgencyOwnerDto } from './dto/signup-agency-owner.dto';
 import { JwtPayload } from './types/jwt-payload.type';
 
 @Injectable()
@@ -22,6 +23,7 @@ export class AuthService {
   constructor(
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly dataSource: DataSource,
 
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
@@ -29,6 +31,62 @@ export class AuthService {
     @InjectRepository(Agency)
     private readonly agenciesRepository: Repository<Agency>,
   ) {}
+
+  async signupAgencyOwner(dto: SignupAgencyOwnerDto) {
+    const email = this.normalizeEmail(dto.email);
+    const username = this.normalizeText(dto.username);
+    const agencySlug = this.normalizeText(dto.agency.slug);
+
+    await this.ensureUserCredentialsAreAvailable(email, username);
+    await this.ensureAgencySlugIsAvailable(agencySlug);
+
+    const passwordHash = await bcrypt.hash(dto.password, 10);
+
+    const { user, agency } = await this.dataSource.transaction(async (manager) => {
+      const agenciesRepository = manager.getRepository(Agency);
+      const usersRepository = manager.getRepository(User);
+
+      const agency = agenciesRepository.create({
+        name: this.normalizeText(dto.agency.name),
+        slug: agencySlug,
+        phoneNumber: this.normalizeNullableText(dto.agency.phoneNumber),
+        website: this.normalizeNullableText(dto.agency.website),
+        country: this.normalizeNullableText(dto.agency.country),
+        city: this.normalizeNullableText(dto.agency.city),
+      });
+
+      const savedAgency = await agenciesRepository.save(agency);
+
+      const user = usersRepository.create({
+        email,
+        username,
+        passwordHash,
+        firstName: this.normalizeText(dto.firstName),
+        lastName: this.normalizeText(dto.lastName),
+        dateOfBirth: dto.dateOfBirth ?? null,
+        phoneNumber: this.normalizeNullableText(dto.phoneNumber),
+        agencyId: savedAgency.id,
+        role: UserRole.OWNER,
+        isActive: true,
+      });
+
+      const savedUser = await usersRepository.save(user);
+
+      return {
+        user: savedUser,
+        agency: savedAgency,
+      };
+    });
+
+    const tokens = await this.generateTokens(user);
+    await this.saveRefreshTokenHash(user.id, tokens.refreshToken);
+
+    return {
+      ...tokens,
+      user: this.buildSafeUser(user),
+      agency: this.buildSafeAgency(agency),
+    };
+  }
 
   async signup(dto: SignupDto) {
     const email = dto.email.toLowerCase().trim();
@@ -191,6 +249,57 @@ export class AuthService {
     await this.usersRepository.update(userId, {
       refreshTokenHash,
     });
+  }
+
+  private async ensureUserCredentialsAreAvailable(email: string, username: string) {
+    const existingUser = await this.usersRepository.findOne({
+      where: [{ email }, { username }],
+    });
+
+    if (existingUser) {
+      throw new ConflictException('User with this email or username already exists');
+    }
+  }
+
+  private async ensureAgencySlugIsAvailable(slug: string) {
+    const existingAgency = await this.agenciesRepository.findOne({
+      where: { slug },
+    });
+
+    if (existingAgency) {
+      throw new ConflictException('Agency with this slug already exists');
+    }
+  }
+
+  private normalizeEmail(email: string) {
+    return email.toLowerCase().trim();
+  }
+
+  private normalizeText(value: string) {
+    return value.trim();
+  }
+
+  private normalizeNullableText(value?: string | null) {
+    if (value === undefined || value === null) {
+      return null;
+    }
+
+    const normalizedValue = value.trim();
+
+    return normalizedValue.length ? normalizedValue : null;
+  }
+
+  private buildSafeAgency(agency: Agency) {
+    return {
+      id: agency.id,
+      uuid: agency.uuid,
+      name: agency.name,
+      slug: agency.slug,
+      phoneNumber: agency.phoneNumber,
+      website: agency.website,
+      country: agency.country,
+      city: agency.city,
+    };
   }
 
   private buildSafeUser(user: User) {

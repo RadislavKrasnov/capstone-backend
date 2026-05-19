@@ -7,10 +7,27 @@ import { LoginDto } from './dto/login.dto';
 import { SignupDto } from './dto/signup.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import type { AuthenticatedUser, RefreshTokenRequest } from './types/auth.type';
+import { SignupAgencyOwnerDto } from './dto/signup-agency-owner.dto';
 
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
+
+  @Post('signup-agency-owner')
+  async signupAgencyOwner(
+    @Body() dto: SignupAgencyOwnerDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const result = await this.authService.signupAgencyOwner(dto);
+
+    this.setRefreshTokenCookie(response, result.refreshToken);
+
+    return {
+      accessToken: result.accessToken,
+      user: result.user,
+      agency: result.agency,
+    };
+  }
 
   @Post('signup')
   async signup(@Body() dto: SignupDto, @Res({ passthrough: true }) response: Response) {
