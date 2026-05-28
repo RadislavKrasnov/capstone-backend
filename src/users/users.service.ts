@@ -1,4 +1,9 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcryptjs';
 import { Repository } from 'typeorm';
@@ -19,12 +24,20 @@ export class UsersService {
     private readonly agenciesRepository: Repository<Agency>,
   ) {}
 
-  async findAll(query: FindUsersQueryDto) {
+  async findAll(query: FindUsersQueryDto, currentUserAgencyId: number) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
+    const agencyId = query.agencyId ?? currentUserAgencyId;
+
+    if (agencyId !== currentUserAgencyId) {
+      throw new ForbiddenException('You are not allowed to fetch users from another agency');
+    }
 
     const [users, totalItems] = await this.usersRepository.findAndCount({
+      where: {
+        agencyId,
+      },
       relations: {
         agency: true,
       },

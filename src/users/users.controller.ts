@@ -11,6 +11,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CreateUserDto } from './dto/create-user.dto';
 import { FindUsersQueryDto } from './dto/find-users-query.dto';
@@ -23,8 +24,8 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Get()
-  findAll(@Query() query: FindUsersQueryDto) {
-    return this.usersService.findAll(query);
+  findAll(@Query() query: FindUsersQueryDto, @CurrentUser('agencyId') agencyId: number) {
+    return this.usersService.findAll(query, agencyId);
   }
 
   @Get(':uuid')
