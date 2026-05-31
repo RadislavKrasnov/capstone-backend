@@ -25,6 +25,9 @@ export class TourPackagesService {
     const skip = (page - 1) * limit;
 
     const [tourPackages, totalItems] = await this.tourPackagesRepository.findAndCount({
+      where: {
+        ...(query.agencyId ? { agencyId: query.agencyId } : {}),
+      },
       relations: {
         agency: true,
       },
