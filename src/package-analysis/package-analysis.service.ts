@@ -94,7 +94,7 @@ export class PackageAnalysisService {
     }
   }
 
-  async getLatestCompletedAnalysis(packageUuid: string): Promise<AnalysisDashboardResponse> {
+  async getLatestCompletedAnalysis(packageUuid: string): Promise<AnalysisDashboardResponse | null> {
     const context = await this.buildBaseContext(packageUuid);
 
     const analysisRun = await this.packageAnalysisRunsRepository.findOne({
@@ -114,7 +114,7 @@ export class PackageAnalysisService {
     });
 
     if (!analysisRun) {
-      throw new NotFoundException('Completed analysis was not found for this package');
+      return null;
     }
 
     this.calculateFullContext(context);
