@@ -3,7 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import * as bcrypt from 'bcryptjs';
 import cookieParser from 'cookie-parser';
-import * as request from 'supertest';
+import request from 'supertest';
 import { Repository } from 'typeorm';
 
 import { Agency } from '../agencies/entities/agency.entity';
@@ -19,14 +19,14 @@ import { CostItem } from '../costs/entities/cost-item.entity';
 import { Supplier } from '../costs/entities/supplier.entity';
 import { ItineraryItem } from '../itinerary/entities/itinerary-item.entity';
 import { TourDay } from '../itinerary/entities/tour-day.entity';
+import { TourPackage } from '../tour-packages/entities/tour-package.entity';
+import { User, UserRole } from '../users/entities/user.entity';
 import { AnalysisConfiguration } from './entities/analysis-configuration.entity';
 import { DailyFatigueResult } from './entities/daily-fatigue-result.entity';
 import { FinancialAnalysisResult } from './entities/financial-analysis-result.entity';
 import { GeneratedRecommendation } from './entities/generated-recommendation.entity';
 import { PackageAnalysisRun } from './entities/package-analysis-run.entity';
 import { PackageScoreResult } from './entities/package-score-result.entity';
-import { TourPackage } from '../tour-packages/entities/tour-package.entity';
-import { User, UserRole } from '../users/entities/user.entity';
 
 type TestContext = {
   agency: Agency;
@@ -35,8 +35,44 @@ type TestContext = {
   accessToken: string;
 };
 
+type LoginResponseBody = {
+  accessToken: string;
+};
+
+type AnalysisResponseBody = {
+  analysisRun: {
+    uuid: string;
+    status: AnalysisStatus;
+    algorithmVersion: string;
+  };
+  financial: {
+    totalRevenue: number;
+    totalCost: number;
+    grossProfit: number;
+    grossMarginPercent: number;
+    breakEvenGroupSizeRounded: number;
+    financialRiskLevel: string;
+  };
+  itinerary: {
+    dailyResults: Array<{
+      fatigueLevel: string;
+    }>;
+  };
+  quality: {
+    overallScore: number;
+    qualityLevel: string;
+  };
+};
+
+type AnalysisErrorResponseBody = {
+  message: string;
+  recommendations: Array<{
+    ruleCode: string;
+  }>;
+};
+
 describe('Package analysis integration', () => {
-  let app: INestApplication;
+  let app: INestApplication | null = null;
 
   let agenciesRepository: Repository<Agency>;
   let usersRepository: Repository<User>;
@@ -53,6 +89,136 @@ describe('Package analysis integration', () => {
   let generatedRecommendationsRepository: Repository<GeneratedRecommendation>;
 
   const testPassword = 'password123';
+
+  function getApp(): INestApplication {
+    if (!app) {
+      throw new Error('Nest application was not initialized before test execution.');
+    }
+
+    return app;
+  }
+
+  function isObject(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null;
+  }
+
+  function getLoginResponseBody(body: unknown): LoginResponseBody {
+    if (!isObject(body) || typeof body.accessToken !== 'string') {
+      throw new Error('Login response does not contain a valid accessToken.');
+    }
+
+    return {
+      accessToken: body.accessToken,
+    };
+  }
+
+  function getAnalysisResponseBody(body: unknown): AnalysisResponseBody {
+    if (!isObject(body)) {
+      throw new Error('Analysis response body is not an object.');
+    }
+
+    const analysisRun = body.analysisRun;
+    const financial = body.financial;
+    const itinerary = body.itinerary;
+    const quality = body.quality;
+
+    if (!isObject(analysisRun)) {
+      throw new Error('Analysis response does not contain analysisRun object.');
+    }
+
+    if (
+      typeof analysisRun.uuid !== 'string' ||
+      typeof analysisRun.status !== 'string' ||
+      typeof analysisRun.algorithmVersion !== 'string'
+    ) {
+      throw new Error('Analysis response contains invalid analysisRun data.');
+    }
+
+    if (!isObject(financial)) {
+      throw new Error('Analysis response does not contain financial object.');
+    }
+
+    if (
+      typeof financial.totalRevenue !== 'number' ||
+      typeof financial.totalCost !== 'number' ||
+      typeof financial.grossProfit !== 'number' ||
+      typeof financial.grossMarginPercent !== 'number' ||
+      typeof financial.breakEvenGroupSizeRounded !== 'number' ||
+      typeof financial.financialRiskLevel !== 'string'
+    ) {
+      throw new Error('Analysis response contains invalid financial data.');
+    }
+
+    if (!isObject(itinerary) || !Array.isArray(itinerary.dailyResults)) {
+      throw new Error('Analysis response does not contain valid itinerary.dailyResults.');
+    }
+
+    if (!isObject(quality)) {
+      throw new Error('Analysis response does not contain quality object.');
+    }
+
+    if (typeof quality.overallScore !== 'number' || typeof quality.qualityLevel !== 'string') {
+      throw new Error('Analysis response contains invalid quality data.');
+    }
+
+    return {
+      analysisRun: {
+        uuid: analysisRun.uuid,
+        status: analysisRun.status as AnalysisStatus,
+        algorithmVersion: analysisRun.algorithmVersion,
+      },
+      financial: {
+        totalRevenue: financial.totalRevenue,
+        totalCost: financial.totalCost,
+        grossProfit: financial.grossProfit,
+        grossMarginPercent: financial.grossMarginPercent,
+        breakEvenGroupSizeRounded: financial.breakEvenGroupSizeRounded,
+        financialRiskLevel: financial.financialRiskLevel,
+      },
+      itinerary: {
+        dailyResults: itinerary.dailyResults.map((dailyResult) => {
+          if (!isObject(dailyResult) || typeof dailyResult.fatigueLevel !== 'string') {
+            throw new Error('Analysis response contains invalid daily fatigue result.');
+          }
+
+          return {
+            fatigueLevel: dailyResult.fatigueLevel,
+          };
+        }),
+      },
+      quality: {
+        overallScore: quality.overallScore,
+        qualityLevel: quality.qualityLevel,
+      },
+    };
+  }
+
+  function getAnalysisErrorResponseBody(body: unknown): AnalysisErrorResponseBody {
+    if (!isObject(body)) {
+      throw new Error('Analysis error response body is not an object.');
+    }
+
+    if (typeof body.message !== 'string') {
+      throw new Error('Analysis error response does not contain a valid message.');
+    }
+
+    if (!Array.isArray(body.recommendations)) {
+      throw new Error('Analysis error response does not contain recommendations array.');
+    }
+
+    return {
+      message: body.message,
+      recommendations: body.recommendations.map((recommendation) => {
+        if (!isObject(recommendation) || typeof recommendation.ruleCode !== 'string') {
+          throw new Error('Analysis error response contains invalid recommendation.');
+        }
+
+        return {
+          ruleCode: recommendation.ruleCode,
+        };
+      }),
+    };
+  }
 
   beforeAll(async () => {
     process.env.JWT_ACCESS_SECRET = process.env.JWT_ACCESS_SECRET ?? 'test_access_secret';
@@ -93,36 +259,40 @@ describe('Package analysis integration', () => {
   });
 
   afterAll(async () => {
-    await app.close();
+    if (app) {
+      await app.close();
+    }
   });
 
   it('analyzes a valid package and persists analysis results', async () => {
     const context = await createValidAnalysisContext();
 
-    const response = await request(app.getHttpServer())
+    const response = await request(getApp().getHttpServer())
       .post(`/tour-packages/${context.tourPackage.uuid}/analyze`)
       .set('Authorization', `Bearer ${context.accessToken}`)
       .expect(201);
 
-    expect(response.body.analysisRun.status).toBe(AnalysisStatus.COMPLETED);
-    expect(response.body.analysisRun.algorithmVersion).toBe('v1');
+    const responseBody = getAnalysisResponseBody(response.body);
 
-    expect(response.body.financial.totalRevenue).toBe(9000);
-    expect(response.body.financial.totalCost).toBeGreaterThan(0);
-    expect(response.body.financial.grossProfit).toBeGreaterThan(0);
-    expect(response.body.financial.grossMarginPercent).toBeGreaterThan(0);
-    expect(response.body.financial.breakEvenGroupSizeRounded).toBeGreaterThanOrEqual(1);
-    expect(response.body.financial.financialRiskLevel).toBeDefined();
+    expect(responseBody.analysisRun.status).toBe(AnalysisStatus.COMPLETED);
+    expect(responseBody.analysisRun.algorithmVersion).toBe('v1');
 
-    expect(response.body.itinerary.dailyResults).toHaveLength(2);
-    expect(response.body.itinerary.dailyResults[0].fatigueLevel).toBeDefined();
+    expect(responseBody.financial.totalRevenue).toBe(9000);
+    expect(responseBody.financial.totalCost).toBeGreaterThan(0);
+    expect(responseBody.financial.grossProfit).toBeGreaterThan(0);
+    expect(responseBody.financial.grossMarginPercent).toBeGreaterThan(0);
+    expect(responseBody.financial.breakEvenGroupSizeRounded).toBeGreaterThanOrEqual(1);
+    expect(responseBody.financial.financialRiskLevel).toBeDefined();
 
-    expect(response.body.quality.overallScore).toBeGreaterThan(0);
-    expect(response.body.quality.qualityLevel).toBeDefined();
+    expect(responseBody.itinerary.dailyResults).toHaveLength(2);
+    expect(responseBody.itinerary.dailyResults[0]?.fatigueLevel).toBeDefined();
+
+    expect(responseBody.quality.overallScore).toBeGreaterThan(0);
+    expect(responseBody.quality.qualityLevel).toBeDefined();
 
     const analysisRun = await packageAnalysisRunsRepository.findOne({
       where: {
-        uuid: response.body.analysisRun.uuid,
+        uuid: responseBody.analysisRun.uuid,
       },
       relations: {
         financialResult: true,
@@ -132,11 +302,14 @@ describe('Package analysis integration', () => {
       },
     });
 
-    expect(analysisRun).toBeDefined();
-    expect(analysisRun?.analysisStatus).toBe(AnalysisStatus.COMPLETED);
-    expect(analysisRun?.financialResult).toBeDefined();
-    expect(analysisRun?.scoreResult).toBeDefined();
-    expect(analysisRun?.dailyFatigueResults).toHaveLength(2);
+    if (!analysisRun) {
+      throw new Error('Persisted analysis run was not found in the database.');
+    }
+
+    expect(analysisRun.analysisStatus).toBe(AnalysisStatus.COMPLETED);
+    expect(analysisRun.financialResult).toBeDefined();
+    expect(analysisRun.scoreResult).toBeDefined();
+    expect(analysisRun.dailyFatigueResults).toHaveLength(2);
 
     const updatedPackage = await tourPackagesRepository.findOneByOrFail({
       id: context.tourPackage.id,
@@ -150,15 +323,17 @@ describe('Package analysis integration', () => {
       withCosts: false,
     });
 
-    const response = await request(app.getHttpServer())
+    const response = await request(getApp().getHttpServer())
       .post(`/tour-packages/${context.tourPackage.uuid}/analyze`)
       .set('Authorization', `Bearer ${context.accessToken}`)
       .expect(400);
 
-    expect(response.body.message).toBe(
+    const responseBody = getAnalysisErrorResponseBody(response.body);
+
+    expect(responseBody.message).toBe(
       'Package cannot be analyzed because required analysis data is missing.',
     );
-    expect(response.body.recommendations).toEqual(
+    expect(responseBody.recommendations).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           ruleCode: 'MISSING_COST_DATA',
@@ -180,15 +355,17 @@ describe('Package analysis integration', () => {
       withItinerary: false,
     });
 
-    const response = await request(app.getHttpServer())
+    const response = await request(getApp().getHttpServer())
       .post(`/tour-packages/${context.tourPackage.uuid}/analyze`)
       .set('Authorization', `Bearer ${context.accessToken}`)
       .expect(400);
 
-    expect(response.body.message).toBe(
+    const responseBody = getAnalysisErrorResponseBody(response.body);
+
+    expect(responseBody.message).toBe(
       'Package cannot be analyzed because required analysis data is missing.',
     );
-    expect(response.body.recommendations).toEqual(
+    expect(responseBody.recommendations).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           ruleCode: 'MISSING_ITINERARY_DATA',
@@ -274,7 +451,7 @@ describe('Package analysis integration', () => {
       await createRequiredCosts(agency, tourPackage, createdDays[0]);
     }
 
-    const loginResponse = await request(app.getHttpServer())
+    const loginResponse = await request(getApp().getHttpServer())
       .post('/auth/login')
       .send({
         email: user.email,
@@ -282,11 +459,13 @@ describe('Package analysis integration', () => {
       })
       .expect(201);
 
+    const loginResponseBody = getLoginResponseBody(loginResponse.body);
+
     return {
       agency,
       user,
       tourPackage,
-      accessToken: loginResponse.body.accessToken,
+      accessToken: loginResponseBody.accessToken,
     };
   }
 
