@@ -78,8 +78,8 @@ export class AuthController {
     response.clearCookie('refreshToken', {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/auth/refresh',
+      sameSite: 'none',
+      path: '/',
     });
 
     return {
@@ -97,8 +97,8 @@ export class AuthController {
     response.cookie('refreshToken', refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/auth/refresh',
+      sameSite: 'none',
+      path: '/',
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
   }
