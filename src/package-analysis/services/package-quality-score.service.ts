@@ -152,6 +152,34 @@ export class PackageQualityScoreService {
       });
     }
 
+    const hasRequiredCostData = costStructureMetrics.requiredCostItemsCount > 0;
+
+    if (
+      hasRequiredCostData &&
+      costStructureScore < QUALITY_SCORE_THRESHOLDS.HIGH_SEVERITY_SUB_SCORE
+    ) {
+      overallScore = Math.min(overallScore, QUALITY_SCORE_THRESHOLDS.CRITICAL_COST_STRUCTURE_CAP);
+
+      appliedCaps.push({
+        code: 'CRITICAL_COST_STRUCTURE_CAP',
+        description:
+          'Cost structure score is critically weak, so the package cannot receive a good quality classification.',
+        cappedAt: QUALITY_SCORE_THRESHOLDS.CRITICAL_COST_STRUCTURE_CAP,
+      });
+    } else if (
+      hasRequiredCostData &&
+      costStructureScore < QUALITY_SCORE_THRESHOLDS.WEAK_SUB_SCORE
+    ) {
+      overallScore = Math.min(overallScore, QUALITY_SCORE_THRESHOLDS.WEAK_COST_STRUCTURE_CAP);
+
+      appliedCaps.push({
+        code: 'WEAK_COST_STRUCTURE_CAP',
+        description:
+          'Cost structure score is weak, so the package cannot be classified as excellent.',
+        cappedAt: QUALITY_SCORE_THRESHOLDS.WEAK_COST_STRUCTURE_CAP,
+      });
+    }
+
     return {
       overallScore: this.clamp(
         overallScore,
